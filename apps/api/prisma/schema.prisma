@@ -1,0 +1,258 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  SALES_MANAGER
+  EMPLOYEE
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  INTERESTED
+  FOLLOW_UP
+  QUOTATION_SENT
+  WON
+  LOST
+}
+
+enum FollowUpStatus {
+  PENDING
+  COMPLETED
+  OVERDUE
+  CANCELLED
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  VIEWED
+  ACCEPTED
+  REJECTED
+}
+
+enum WhatsAppDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum NotificationType {
+  NEW_LEAD
+  FOLLOW_UP_REMINDER
+  CUSTOMER_REPLY
+  DEAL_WON
+  DEAL_LOST
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(EMPLOYEE)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  managerId String?
+  manager   User?   @relation("ManagerReports", fields: [managerId], references: [id])
+  reports   User[]  @relation("ManagerReports")
+
+  assignedLeads   Lead[]           @relation("AssignedLeads")
+  activityLogs    ActivityLog[]
+  followUps       FollowUp[]
+  quotationsMade  Quotation[]
+  whatsAppSent    WhatsAppMessage[]
+  notes           Note[]
+  notifications   Notification[]
+
+  @@map("users")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String   @unique
+  email     String?
+  company   String?
+  city      String?
+  state     String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  leads            Lead[]
+  quotations       Quotation[]
+  whatsAppMessages WhatsAppMessage[]
+  notesList        Note[]
+
+  @@index([name])
+  @@map("customers")
+}
+
+model Note {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id])
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@index([customerId])
+  @@map("notes")
+}
+
+model Lead {
+  id                 String     @id @default(cuid())
+  customerId         String
+  customer           Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  productInterested  String?
+  source             String     @default("IndiaMART")
+  status             LeadStatus @default(NEW)
+  assignedToId       String?
+  assignedTo         User?      @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  dealValue          Decimal?   @db.Decimal(12, 2)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  followUps  FollowUp[]
+  quotations Quotation[]
+
+  @@index([status])
+  @@index([assignedToId])
+  @@map("leads")
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@map("activity_logs")
+}
+
+model FollowUp {
+  id        String         @id @default(cuid())
+  leadId    String
+  lead      Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User           @relation(fields: [userId], references: [id])
+  dueAt     DateTime
+  notes     String?
+  status    FollowUpStatus @default(PENDING)
+  outcome   String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([status, dueAt])
+  @@map("follow_ups")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(12, 2)
+  stock       Int      @default(0)
+  category    String
+  subcategory String?
+  images      String[]
+  videos      String[]
+  brochureUrl String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  quotationItems QuotationItem[]
+
+  @@index([category])
+  @@map("products")
+}
+
+model Quotation {
+  id         String           @id @default(cuid())
+  customerId String
+  customer   Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  leadId     String?
+  lead       Lead?            @relation(fields: [leadId], references: [id])
+  createdById String
+  createdBy   User            @relation(fields: [createdById], references: [id])
+  status     QuotationStatus  @default(DRAFT)
+  gstPercent Decimal          @default(18) @db.Decimal(5, 2)
+  discount   Decimal          @default(0) @db.Decimal(12, 2)
+  total      Decimal          @default(0) @db.Decimal(12, 2)
+  pdfUrl     String?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  items QuotationItem[]
+
+  @@map("quotations")
+}
+
+model QuotationItem {
+  id          String    @id @default(cuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product?  @relation(fields: [productId], references: [id])
+  name        String
+  quantity    Int       @default(1)
+  unitPrice   Decimal   @db.Decimal(12, 2)
+
+  @@map("quotation_items")
+}
+
+model WhatsAppMessage {
+  id         String            @id @default(cuid())
+  customerId String
+  customer   Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  direction  WhatsAppDirection
+  body       String
+  mediaUrl   String?
+  sentById   String?
+  sentBy     User?             @relation(fields: [sentById], references: [id])
+  createdAt  DateTime          @default(now())
+
+  @@index([customerId])
+  @@map("whatsapp_messages")
+}
+
+model Notification {
+  id         String           @id @default(cuid())
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       NotificationType
+  title      String
+  body       String?
+  entityType String?
+  entityId   String?
+  isRead     Boolean          @default(false)
+  createdAt  DateTime         @default(now())
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model WhatsAppTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("whatsapp_templates")
+}

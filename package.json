@@ -1,0 +1,20 @@
+{
+  "name": "indiamart-crm",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "postinstall": "pnpm --filter @indiamart-crm/shared build",
+    "dev:api": "pnpm --filter @indiamart-crm/api dev",
+    "dev:web": "pnpm --filter @indiamart-crm/web dev",
+    "build": "pnpm --filter @indiamart-crm/shared build && pnpm --filter @indiamart-crm/api build && pnpm --filter @indiamart-crm/web build",
+    "db:migrate": "pnpm --filter @indiamart-crm/api prisma:migrate",
+    "db:seed": "pnpm --filter @indiamart-crm/api prisma:seed",
+    "docker:up": "docker compose up -d postgres n8n",
+    "docker:down": "docker compose down",
+    "db:backup": "./scripts/backup-db.sh"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.26.2"
+}
