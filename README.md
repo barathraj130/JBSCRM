@@ -2,6 +2,17 @@
 
 A production-style CRM for managing IndiaMART leads, WhatsApp sales automation, and team productivity — built as a premium SaaS-style application with role-based access (Admin / Sales Manager / Employee).
 
+## Live deployment
+
+- **Web**: https://jbscrm-web.vercel.app (Vercel)
+- **API**: https://api-production-d9f8.up.railway.app (Railway, + managed Postgres in the same project)
+- Demo logins: see [Seeded logins](#4-run-migrations-and-seed-demo-data) below.
+
+Known gaps in this deployment (not blockers, just things to know):
+- **Uploads aren't persistent yet** — the API's `apps/api/uploads` has no volume attached (a CLI bug blocked attaching one automatically). Attach one via the Railway dashboard → api service → Volumes → mount path `/repo/apps/api/uploads` if you need uploaded product images/quotation PDFs to survive a redeploy. Until then they're wiped on every deploy.
+- **`ANTHROPIC_API_KEY` and real WhatsApp credentials aren't set** — AI features show their "not configured" state, and WhatsApp send uses the mock provider (logs instead of delivering). Set them as Railway variables on the `api` service to enable.
+- **`N8N_WEBHOOK_URL`** points at a local placeholder — no n8n instance is deployed publicly yet.
+
 ## Tech stack
 
 - **Frontend**: Next.js 14 (App Router), React, TypeScript, Tailwind CSS, shadcn/ui
