@@ -58,16 +58,16 @@ export function toLeadDTO(lead: Lead & { customer: Customer; assignedTo: User | 
   };
 }
 
-export function toNoteDTO(note: Note & { author: User }): NoteDTO {
+export function toNoteDTO(note: Note & { author: User | null }): NoteDTO {
   return {
     id: note.id,
     body: note.body,
-    author: toUserRef(note.author)!,
+    author: toUserRef(note.author),
     createdAt: note.createdAt.toISOString(),
   };
 }
 
-export function toFollowUpDTO(followUp: FollowUp & { user: User }): FollowUpDTO {
+export function toFollowUpDTO(followUp: FollowUp & { user: User | null }): FollowUpDTO {
   return {
     id: followUp.id,
     leadId: followUp.leadId,
@@ -75,7 +75,7 @@ export function toFollowUpDTO(followUp: FollowUp & { user: User }): FollowUpDTO 
     notes: followUp.notes,
     status: followUp.status,
     outcome: followUp.outcome,
-    user: toUserRef(followUp.user)!,
+    user: toUserRef(followUp.user),
     createdAt: followUp.createdAt.toISOString(),
   };
 }
@@ -109,7 +109,7 @@ export function toQuotationItemDTO(item: QuotationItem): QuotationItemDTO {
 }
 
 export function toQuotationDTO(
-  quotation: Quotation & { customer: Customer; createdBy: User; items: QuotationItem[] }
+  quotation: Quotation & { customer: Customer; createdBy: User | null; items: QuotationItem[] }
 ): QuotationDTO {
   const items = quotation.items.map(toQuotationItemDTO);
   const subtotal = items.reduce((sum, i) => sum + i.lineTotal, 0);
@@ -122,7 +122,7 @@ export function toQuotationDTO(
     subtotal,
     total: Number(quotation.total),
     pdfUrl: quotation.pdfUrl,
-    createdBy: toUserRef(quotation.createdBy)!,
+    createdBy: toUserRef(quotation.createdBy),
     items,
     createdAt: quotation.createdAt.toISOString(),
     updatedAt: quotation.updatedAt.toISOString(),

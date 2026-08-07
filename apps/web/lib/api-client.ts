@@ -331,6 +331,10 @@ export function updateEmployee(token: string, id: string, input: UpdateEmployeeI
   return request<AdminUserDTO>(`/api/admin/employees/${id}`, { method: "PATCH", body: JSON.stringify(input) }, token);
 }
 
+export function deleteEmployee(token: string, id: string): Promise<void> {
+  return request<void>(`/api/admin/employees/${id}`, { method: "DELETE" }, token);
+}
+
 export function getSystemLogs(token: string): Promise<SystemLogDTO[]> {
   return request<SystemLogDTO[]>("/api/admin/system-logs", {}, token);
 }

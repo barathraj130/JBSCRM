@@ -45,7 +45,7 @@ export interface LeadDTO {
 export interface NoteDTO {
   id: string;
   body: string;
-  author: UserRefDTO;
+  author: UserRefDTO | null;
   createdAt: string;
 }
 
@@ -56,7 +56,7 @@ export interface FollowUpDTO {
   notes: string | null;
   status: FollowUpStatus;
   outcome: string | null;
-  user: UserRefDTO;
+  user: UserRefDTO | null;
   createdAt: string;
 }
 
@@ -171,7 +171,7 @@ export interface QuotationDTO {
   subtotal: number;
   total: number;
   pdfUrl: string | null;
-  createdBy: UserRefDTO;
+  createdBy: UserRefDTO | null;
   items: QuotationItemDTO[];
   createdAt: string;
   updatedAt: string;

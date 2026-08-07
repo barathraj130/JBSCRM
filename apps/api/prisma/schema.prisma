@@ -62,7 +62,7 @@ model User {
   updatedAt    DateTime @updatedAt
 
   managerId String?
-  manager   User?   @relation("ManagerReports", fields: [managerId], references: [id])
+  manager   User?   @relation("ManagerReports", fields: [managerId], references: [id], onDelete: SetNull)
   reports   User[]  @relation("ManagerReports")
 
   assignedLeads   Lead[]           @relation("AssignedLeads")
@@ -101,8 +101,8 @@ model Note {
   id         String   @id @default(cuid())
   customerId String
   customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  authorId   String
-  author     User     @relation(fields: [authorId], references: [id])
+  authorId   String?
+  author     User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
   body       String
   createdAt  DateTime @default(now())
 
@@ -118,7 +118,7 @@ model Lead {
   source             String     @default("IndiaMART")
   status             LeadStatus @default(NEW)
   assignedToId       String?
-  assignedTo         User?      @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  assignedTo         User?      @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
   dealValue          Decimal?   @db.Decimal(12, 2)
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
@@ -136,7 +136,7 @@ model ActivityLog {
   entityType String
   entityId   String
   userId     String?
-  user       User?    @relation(fields: [userId], references: [id])
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   action     String
   metadata   Json?
   createdAt  DateTime @default(now())
@@ -149,8 +149,8 @@ model FollowUp {
   id        String         @id @default(cuid())
   leadId    String
   lead      Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User           @relation(fields: [userId], references: [id])
+  userId    String?
+  user      User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
   dueAt     DateTime
   notes     String?
   status    FollowUpStatus @default(PENDING)
@@ -188,8 +188,8 @@ model Quotation {
   customer   Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
   leadId     String?
   lead       Lead?            @relation(fields: [leadId], references: [id])
-  createdById String
-  createdBy   User            @relation(fields: [createdById], references: [id])
+  createdById String?
+  createdBy   User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
   status     QuotationStatus  @default(DRAFT)
   gstPercent Decimal          @default(18) @db.Decimal(5, 2)
   discount   Decimal          @default(0) @db.Decimal(12, 2)
@@ -224,7 +224,7 @@ model WhatsAppMessage {
   body       String
   mediaUrl   String?
   sentById   String?
-  sentBy     User?             @relation(fields: [sentById], references: [id])
+  sentBy     User?             @relation(fields: [sentById], references: [id], onDelete: SetNull)
   createdAt  DateTime          @default(now())
 
   @@index([customerId])

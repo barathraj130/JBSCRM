@@ -3,6 +3,7 @@ import { z } from "zod";
 import * as adminService from "@/services/admin.service";
 import { Role } from "@indiamart-crm/shared";
 import { HttpError } from "@/middleware/errorHandler";
+import type { AuthedRequest } from "@/middleware/auth";
 
 const roleValues = Object.values(Role) as [Role, ...Role[]];
 
@@ -34,6 +35,12 @@ export async function updateEmployeeHandler(req: Request, res: Response) {
   if (!req.params.id) throw new HttpError(400, "Missing employee id");
   const input = updateEmployeeSchema.parse(req.body);
   res.json(await adminService.updateEmployee(req.params.id, input));
+}
+
+export async function deleteEmployeeHandler(req: AuthedRequest, res: Response) {
+  if (!req.params.id) throw new HttpError(400, "Missing employee id");
+  await adminService.deleteEmployee(req.user!.id, req.params.id);
+  res.status(204).send();
 }
 
 export async function listTemplatesHandler(_req: Request, res: Response) {

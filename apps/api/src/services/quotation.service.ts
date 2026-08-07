@@ -35,7 +35,7 @@ export async function getQuotation(actor: RequestingUser, id: string) {
   const quotation = await prisma.quotation.findUnique({ where: { id }, include: quotationInclude });
   if (!quotation) throw new HttpError(404, "Quotation not found");
   const visibleUserIds = await getVisibleUserIds(actor);
-  if (visibleUserIds && !visibleUserIds.includes(quotation.createdById)) {
+  if (visibleUserIds && (!quotation.createdById || !visibleUserIds.includes(quotation.createdById))) {
     throw new HttpError(403, "You do not have access to this quotation");
   }
   return quotation;

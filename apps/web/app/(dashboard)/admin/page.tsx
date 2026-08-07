@@ -81,6 +81,17 @@ export default function AdminPage() {
     fetchTemplates();
   }
 
+  async function handleDeleteEmployee(emp: AdminUserDTO) {
+    if (!token) return;
+    if (!window.confirm(`Delete ${emp.name}? Their leads, notes, and quotations will be kept but unassigned.`)) return;
+    try {
+      await api.deleteEmployee(token, emp.id);
+      fetchEmployees();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to delete employee");
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div>
@@ -137,15 +148,20 @@ export default function AdminPage() {
                         <Badge variant={emp.isActive ? "success" : "outline"}>{emp.isActive ? "Active" : "Inactive"}</Badge>
                       </TableCell>
                       <TableCell>
-                        <button
-                          onClick={() => {
-                            setEditingEmployee(emp);
-                            setEmployeeDialogOpen(true);
-                          }}
-                          className="text-muted-foreground hover:text-foreground"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingEmployee(emp);
+                              setEmployeeDialogOpen(true);
+                            }}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => handleDeleteEmployee(emp)} className="text-muted-foreground hover:text-destructive">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

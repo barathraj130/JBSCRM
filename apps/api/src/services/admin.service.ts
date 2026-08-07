@@ -29,6 +29,27 @@ export async function updateEmployee(id: string, input: UpdateEmployeeInput) {
   return toAdminUserDTO(user);
 }
 
+export async function deleteEmployee(actorId: string, id: string) {
+  if (actorId === id) {
+    throw new HttpError(400, "You cannot delete your own account");
+  }
+
+  const target = await prisma.user.findUnique({ where: { id } });
+  if (!target) throw new HttpError(404, "Employee not found");
+
+  if (target.role === "ADMIN") {
+    const adminCount = await prisma.user.count({ where: { role: "ADMIN" } });
+    if (adminCount <= 1) {
+      throw new HttpError(400, "Cannot delete the last remaining admin");
+    }
+  }
+
+  // Their leads/notes/follow-ups/quotations/activity are kept (owner set to
+  // null via onDelete: SetNull) rather than deleted, so historical customer
+  // data survives an employee leaving.
+  await prisma.user.delete({ where: { id } });
+}
+
 export async function listWhatsAppTemplates() {
   const templates = await prisma.whatsAppTemplate.findMany({ orderBy: { name: "asc" } });
   return templates.map(toWhatsAppTemplateDTO);

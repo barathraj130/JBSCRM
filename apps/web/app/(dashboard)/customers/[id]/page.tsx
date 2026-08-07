@@ -322,7 +322,7 @@ export default function CustomerProfilePage() {
                     <div>
                       <p className="text-sm font-medium">{new Date(f.dueAt).toLocaleString()}</p>
                       {f.notes && <p className="text-sm text-muted-foreground">{f.notes}</p>}
-                      <p className="text-xs text-muted-foreground">Owner: {f.user.name}</p>
+                      <p className="text-xs text-muted-foreground">Owner: {f.user?.name ?? "Removed employee"}</p>
                     </div>
                   </div>
                   {f.status === "PENDING" ? (
@@ -361,7 +361,7 @@ export default function CustomerProfilePage() {
                 <CardContent className="p-4">
                   <p className="text-sm">{note.body}</p>
                   <p className="mt-1.5 text-xs text-muted-foreground">
-                    {note.author.name} · {new Date(note.createdAt).toLocaleString()}
+                    {note.author?.name ?? "Removed employee"} · {new Date(note.createdAt).toLocaleString()}
                   </p>
                 </CardContent>
               </Card>
