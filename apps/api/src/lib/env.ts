@@ -10,7 +10,12 @@ function required(name: string, fallback?: string): string {
 
 export const env = {
   port: Number(process.env.PORT ?? 4000),
-  corsOrigin: required("CORS_ORIGIN", "http://localhost:3000"),
+  // Comma-separated list of exact allowed origins (in addition to any Vercel
+  // preview/production URLs for this project, which are matched separately).
+  corsOrigins: required("CORS_ORIGIN", "http://localhost:3000")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean),
   databaseUrl: required("DATABASE_URL"),
   jwtAccessSecret: required("JWT_ACCESS_SECRET"),
   jwtRefreshSecret: required("JWT_REFRESH_SECRET"),

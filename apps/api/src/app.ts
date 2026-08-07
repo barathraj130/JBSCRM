@@ -21,10 +21,27 @@ import adminRoutes from "@/routes/admin.routes";
 import whatsappTemplateRoutes from "@/routes/whatsappTemplate.routes";
 import { errorHandler } from "@/middleware/errorHandler";
 
+// Every Vercel deploy of this project gets its own unique preview URL in
+// addition to the stable production alias in CORS_ORIGIN — e.g.
+// https://jbscrm-<hash>-barathraj130s-projects.vercel.app. Allow those too,
+// scoped tightly to this project's Vercel team so it isn't a wildcard for
+// all of vercel.app.
+const VERCEL_PREVIEW_ORIGIN = /^https:\/\/jbscrm(-[a-z0-9-]+)?-barathraj130s-projects\.vercel\.app$/;
+
+function isAllowedOrigin(origin: string | undefined): boolean {
+  if (!origin) return true; // same-origin / non-browser requests (curl, server-to-server)
+  return env.corsOrigins.includes(origin) || VERCEL_PREVIEW_ORIGIN.test(origin);
+}
+
 export function createApp() {
   const app = express();
 
-  app.use(cors({ origin: env.corsOrigin, credentials: true }));
+  app.use(
+    cors({
+      origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),
+      credentials: true,
+    })
+  );
   app.use(express.json());
   app.use(morgan("dev"));
   app.use("/uploads", express.static(UPLOADS_DIR));
