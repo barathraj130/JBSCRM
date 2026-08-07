@@ -1,0 +1,188 @@
+{
+  "name": "WhatsApp Inbound → CRM Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "whatsapp-inbound",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b1a1a111-0000-4000-8000-000000000001",
+      "name": "Meta Verification (GET)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 120],
+      "webhookId": "whatsapp-inbound-verify"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.query[\"hub.verify_token\"] }}",
+              "rightValue": "={{ $env.WHATSAPP_VERIFY_TOKEN }}",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b1a1a111-0000-4000-8000-000000000002",
+      "name": "Verify token matches?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 120]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.query[\"hub.challenge\"] }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "b1a1a111-0000-4000-8000-000000000003",
+      "name": "Respond: challenge",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 40]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Forbidden",
+        "options": { "responseCode": 403 }
+      },
+      "id": "b1a1a111-0000-4000-8000-000000000004",
+      "name": "Respond: forbidden",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-inbound",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b1a1a111-0000-4000-8000-000000000005",
+      "name": "WhatsApp Message (POST)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 400],
+      "webhookId": "whatsapp-inbound-message"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Meta WhatsApp Cloud API webhook payload shape:\n// { entry: [{ changes: [{ value: { messages: [{ from, text: { body } }] } }] }] }\n// Non-message events (delivery/read receipts, etc.) hit this same webhook\n// and must still be acknowledged with 200, just with no CRM call made.\nconst body = $input.item.json.body ?? $input.item.json;\nconst value = body?.entry?.[0]?.changes?.[0]?.value;\nconst message = value?.messages?.[0];\n\nif (!message) {\n  return [{ json: { hasMessage: false } }];\n}\n\nconst text =\n  message.text?.body ??\n  message.button?.text ??\n  message.interactive?.button_reply?.title ??\n  null;\n\nif (!text) {\n  // Non-text message (image/audio/location/etc.) - not handled by the\n  // catalog-matching pipeline yet, just acknowledge and skip.\n  return [{ json: { hasMessage: false } }];\n}\n\nreturn [{\n  json: {\n    hasMessage: true,\n    phone: message.from,\n    body: text,\n  },\n}];"
+      },
+      "id": "b1a1a111-0000-4000-8000-000000000006",
+      "name": "Extract message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.hasMessage }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b1a1a111-0000-4000-8000-000000000007",
+      "name": "Has a text message?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CRM_API_URL }}/api/webhooks/whatsapp-inbound",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-n8n-api-key", "value": "={{ $env.CRM_N8N_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ phone: $json.phone, body: $json.body }) }}",
+        "options": {}
+      },
+      "id": "b1a1a111-0000-4000-8000-000000000008",
+      "name": "Notify CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 320]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "EVENT_RECEIVED",
+        "options": { "responseCode": 200 }
+      },
+      "id": "b1a1a111-0000-4000-8000-000000000009",
+      "name": "Respond: OK (handled)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 320]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "EVENT_RECEIVED",
+        "options": { "responseCode": 200 }
+      },
+      "id": "b1a1a111-0000-4000-8000-000000000010",
+      "name": "Respond: OK (ignored)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 480]
+    }
+  ],
+  "connections": {
+    "Meta Verification (GET)": {
+      "main": [[{ "node": "Verify token matches?", "type": "main", "index": 0 }]]
+    },
+    "Verify token matches?": {
+      "main": [
+        [{ "node": "Respond: challenge", "type": "main", "index": 0 }],
+        [{ "node": "Respond: forbidden", "type": "main", "index": 0 }]
+      ]
+    },
+    "WhatsApp Message (POST)": {
+      "main": [[{ "node": "Extract message", "type": "main", "index": 0 }]]
+    },
+    "Extract message": {
+      "main": [[{ "node": "Has a text message?", "type": "main", "index": 0 }]]
+    },
+    "Has a text message?": {
+      "main": [
+        [{ "node": "Notify CRM", "type": "main", "index": 0 }],
+        [{ "node": "Respond: OK (ignored)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Notify CRM": {
+      "main": [[{ "node": "Respond: OK (handled)", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "meta": { "templateCredsSetupCompleted": false },
+  "tags": ["indiamart-crm", "whatsapp"]
+}

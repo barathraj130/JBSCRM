@@ -118,6 +118,8 @@ The intended flow: a customer messages your WhatsApp Business number → n8n rec
 
 Since this only ships with the mock provider, you can exercise the whole pipeline without a real WhatsApp account or n8n workflow via the **"Simulate an incoming customer message"** box on a customer's WhatsApp tab in the CRM.
 
+A ready-to-import n8n workflow implementing the real Meta WhatsApp Business Cloud API side of this (webhook verification + inbound message forwarding) lives in [`n8n/whatsapp-inbound-workflow.json`](n8n/whatsapp-inbound-workflow.json) — see [`n8n/README.md`](n8n/README.md) for setup.
+
 ## What's built
 
 1. **Foundation** — auth, RBAC, dashboard
