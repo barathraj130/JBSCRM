@@ -107,9 +107,9 @@ export default function LeadsPage() {
     setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, status } : l)));
     try {
       await api.updateLead(token, leadId, { status });
-    } catch {
+    } catch (err) {
       setLeads(previous);
-      setError("Could not update status.");
+      setError(err instanceof api.ApiError ? err.message : "Could not update status.");
     }
   }
 
@@ -117,16 +117,24 @@ export default function LeadsPage() {
     if (!token || selected.size === 0) return;
     setBulkSubmitting(true);
     try {
-      await api.bulkUpdateLeads(token, {
+      const requested = selected.size;
+      const { updated } = await api.bulkUpdateLeads(token, {
         ids: Array.from(selected),
         status: bulkStatus ? (bulkStatus as LeadStatus) : undefined,
         assignedToId: bulkAssignee || undefined,
       });
+      if (updated < requested) {
+        setError(
+          `${updated} of ${requested} leads updated. The rest were skipped — e.g. a status of "Quotation Sent" requires an actual quotation to have been sent first.`
+        );
+      } else {
+        setError(null);
+      }
       setBulkStatus("");
       setBulkAssignee("");
       await fetchLeads();
-    } catch {
-      setError("Bulk update failed.");
+    } catch (err) {
+      setError(err instanceof api.ApiError ? err.message : "Bulk update failed.");
     } finally {
       setBulkSubmitting(false);
     }

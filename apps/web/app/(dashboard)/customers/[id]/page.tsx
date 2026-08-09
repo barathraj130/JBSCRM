@@ -92,9 +92,9 @@ export default function CustomerProfilePage() {
     setCustomer({ ...customer, leads: customer.leads.map((l) => (l.id === leadId ? { ...l, status } : l)) });
     try {
       await api.updateLead(token, leadId, { status });
-    } catch {
+    } catch (err) {
       setCustomer(previous);
-      setError("Could not update status.");
+      setError(err instanceof api.ApiError ? err.message : "Could not update status.");
     }
   }
 

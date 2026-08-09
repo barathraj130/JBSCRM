@@ -151,11 +151,30 @@ async function assertLeadAccess(actor: RequestingUser, leadId: string) {
   return lead;
 }
 
+/**
+ * "Quotation Sent" is a claim, not just a label — the status is only allowed to move
+ * there once a real quotation has actually been sent for this lead (a QUOTATION_SENT
+ * Evidence row exists). Otherwise an employee could mark it without ever generating one.
+ */
+async function assertQuotationSentEvidence(leadId: string) {
+  const evidence = await prisma.evidence.findFirst({ where: { leadId, type: "QUOTATION_SENT" } });
+  if (!evidence) {
+    throw new HttpError(
+      400,
+      "Cannot mark as Quotation Sent — no quotation has actually been sent for this lead yet. Send one from the Quotations tab first."
+    );
+  }
+}
+
 export async function updateLead(actor: RequestingUser, leadId: string, input: UpdateLeadInput) {
   const lead = await assertLeadAccess(actor, leadId);
 
   if (input.assignedToId !== undefined && actor.role === "EMPLOYEE") {
     throw new HttpError(403, "Only managers and admins can reassign leads");
+  }
+
+  if (input.status === "QUOTATION_SENT" && lead.status !== "QUOTATION_SENT") {
+    await assertQuotationSentEvidence(leadId);
   }
 
   const data: Prisma.LeadUpdateInput = {};
@@ -241,7 +260,16 @@ export async function bulkUpdateLeads(actor: RequestingUser, input: BulkUpdateLe
 
   const visibleUserIds = await getVisibleUserIds(actor);
   const leads = await prisma.lead.findMany({ where: { id: { in: input.ids } } });
-  const allowed = leads.filter((l) => !visibleUserIds || (l.assignedToId && visibleUserIds.includes(l.assignedToId)));
+  let allowed = leads.filter((l) => !visibleUserIds || (l.assignedToId && visibleUserIds.includes(l.assignedToId)));
+
+  if (input.status === "QUOTATION_SENT") {
+    const withEvidence = new Set(
+      (await prisma.evidence.findMany({ where: { leadId: { in: allowed.map((l) => l.id) }, type: "QUOTATION_SENT" }, select: { leadId: true } })).map(
+        (e) => e.leadId
+      )
+    );
+    allowed = allowed.filter((l) => l.status === "QUOTATION_SENT" || withEvidence.has(l.id));
+  }
 
   const data: Prisma.LeadUncheckedUpdateManyInput = {};
   if (input.status) data.status = input.status;
