@@ -16,11 +16,11 @@ export async function createHandler(req: AuthedRequest, res: Response) {
   res.status(201).json(followUp);
 }
 
-const completeSchema = z.object({ outcome: z.string().optional() });
+const completeSchema = z.object({ outcome: z.string().optional(), evidenceImageUrl: z.string().optional() });
 
 export async function completeHandler(req: AuthedRequest, res: Response) {
   if (!req.params.id) throw new HttpError(400, "Missing follow-up id");
-  const { outcome } = completeSchema.parse(req.body);
-  const followUp = await followUpService.completeFollowUp(req.user!, req.params.id, outcome);
+  const { outcome, evidenceImageUrl } = completeSchema.parse(req.body);
+  const followUp = await followUpService.completeFollowUp(req.user!, req.params.id, outcome, evidenceImageUrl);
   res.json(followUp);
 }

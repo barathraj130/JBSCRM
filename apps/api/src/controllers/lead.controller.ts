@@ -51,6 +51,7 @@ const updateSchema = z.object({
   assignedToId: z.string().nullable().optional(),
   dealValue: z.number().nullable().optional(),
   productInterested: z.string().optional(),
+  evidenceImageUrl: z.string().optional(),
 });
 
 export async function updateHandler(req: AuthedRequest, res: Response) {

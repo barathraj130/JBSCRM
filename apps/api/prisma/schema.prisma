@@ -68,6 +68,7 @@ enum EvidenceType {
   NOTE_ADDED
   CUSTOMER_CREATED
   DEAL_WON
+  CONTACT_PROOF_UPLOADED
 }
 
 enum EvidenceStatus {

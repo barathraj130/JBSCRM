@@ -123,6 +123,8 @@ export interface UpdateLeadInput {
   assignedToId?: string | null;
   dealValue?: number | null;
   productInterested?: string;
+  /** Required when moving status to CONTACTED and no verified contact evidence exists yet. */
+  evidenceImageUrl?: string;
 }
 
 export interface BulkUpdateLeadsInput {

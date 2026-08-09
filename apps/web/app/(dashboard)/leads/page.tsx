@@ -13,6 +13,7 @@ import { StatusSelect } from "@/components/leads/status-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AddCustomerDialog } from "@/components/leads/add-customer-dialog";
 import { AssignmentHistoryDialog } from "@/components/leads/assignment-history-dialog";
+import { UploadEvidenceDialog } from "@/components/evidence/upload-evidence-dialog";
 import { useAuth } from "@/lib/auth-context";
 import * as api from "@/lib/api-client";
 import { LEAD_STATUS_LABELS, LeadStatus, type LeadDTO, type UncontactedLeadAlertDTO, type UserRefDTO } from "@indiamart-crm/shared";
@@ -44,6 +45,7 @@ export default function LeadsPage() {
   const [bulkAssignee, setBulkAssignee] = React.useState<string>("");
   const [bulkSubmitting, setBulkSubmitting] = React.useState(false);
   const [uncontactedAlerts, setUncontactedAlerts] = React.useState<UncontactedLeadAlertDTO[]>([]);
+  const [evidenceTarget, setEvidenceTarget] = React.useState<{ leadId: string; status: LeadStatus } | null>(null);
 
   React.useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -101,14 +103,18 @@ export default function LeadsPage() {
     setSelected((prev) => (prev.size === leads.length ? new Set() : new Set(leads.map((l) => l.id))));
   }
 
-  async function handleStatusChange(leadId: string, status: LeadStatus) {
+  async function handleStatusChange(leadId: string, status: LeadStatus, evidenceImageUrl?: string) {
     if (!token) return;
     const previous = leads;
     setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, status } : l)));
     try {
-      await api.updateLead(token, leadId, { status });
+      await api.updateLead(token, leadId, { status, evidenceImageUrl });
     } catch (err) {
       setLeads(previous);
+      if (err instanceof api.ApiError && err.code === "EVIDENCE_REQUIRED") {
+        setEvidenceTarget({ leadId, status });
+        return;
+      }
       setError(err instanceof api.ApiError ? err.message : "Could not update status.");
     }
   }
@@ -318,6 +324,18 @@ export default function LeadsPage() {
       </Card>
 
       <AddCustomerDialog open={addOpen} onOpenChange={setAddOpen} onCreated={fetchLeads} />
+
+      <UploadEvidenceDialog
+        open={evidenceTarget !== null}
+        onOpenChange={(v) => !v && setEvidenceTarget(null)}
+        title="Upload evidence of contact"
+        description="No verified WhatsApp message or call was found for this lead. Attach a screenshot (e.g. a personal WhatsApp/SMS conversation) to mark it Contacted."
+        onUploaded={async (imageUrl) => {
+          if (!evidenceTarget) return;
+          await handleStatusChange(evidenceTarget.leadId, evidenceTarget.status, imageUrl);
+          setEvidenceTarget(null);
+        }}
+      />
     </div>
   );
 }

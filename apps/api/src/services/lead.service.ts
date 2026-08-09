@@ -1,11 +1,11 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { DuplicateCustomerError, HttpError } from "@/middleware/errorHandler";
+import { DuplicateCustomerError, EvidenceRequiredError, HttpError } from "@/middleware/errorHandler";
 import { toLeadDTO, toLeadAssignmentHistoryDTO } from "@/utils/mappers";
 import { getVisibleUserIds, type RequestingUser } from "@/utils/leadScope";
 import { logActivity } from "@/services/activityLog.service";
 import { createNotification } from "@/services/notification.service";
-import { recordEvidence } from "@/services/evidence.service";
+import { hasAnyContactEvidence, recordContactProof, recordEvidence } from "@/services/evidence.service";
 import { env } from "@/lib/env";
 import type { BulkUpdateLeadsInput, CreateLeadInput, LeadStatus, UpdateLeadInput, UncontactedLeadAlertDTO } from "@indiamart-crm/shared";
 
@@ -166,6 +166,22 @@ async function assertQuotationSentEvidence(leadId: string) {
   }
 }
 
+/**
+ * "Contacted" can legitimately happen outside the app's own tracked channels (a personal
+ * WhatsApp message, an SMS) — unlike Quotation Sent there's no single verifiable action to
+ * require. So this accepts either real in-app evidence, or a screenshot the employee attaches
+ * as self-reported proof. With neither, the status change is rejected with EVIDENCE_REQUIRED
+ * so the frontend can prompt for an upload instead of just failing.
+ */
+async function assertContactedEvidence(leadId: string, customerId: string, employeeId: string, evidenceImageUrl?: string) {
+  if (await hasAnyContactEvidence(leadId)) return;
+  if (!evidenceImageUrl) {
+    throw new EvidenceRequiredError("Please upload a screenshot as evidence that you contacted this customer.");
+  }
+  await recordContactProof({ customerId, leadId, employeeId, imageUrl: evidenceImageUrl });
+  await logActivity("customer", customerId, employeeId, "contact_proof_uploaded", { leadId, imageUrl: evidenceImageUrl });
+}
+
 export async function updateLead(actor: RequestingUser, leadId: string, input: UpdateLeadInput) {
   const lead = await assertLeadAccess(actor, leadId);
 
@@ -175,6 +191,10 @@ export async function updateLead(actor: RequestingUser, leadId: string, input: U
 
   if (input.status === "QUOTATION_SENT") {
     await assertQuotationSentEvidence(leadId);
+  }
+
+  if (input.status === "CONTACTED") {
+    await assertContactedEvidence(leadId, lead.customerId, actor.id, input.evidenceImageUrl);
   }
 
   const data: Prisma.LeadUpdateInput = {};
@@ -272,6 +292,17 @@ export async function bulkUpdateLeads(actor: RequestingUser, input: BulkUpdateLe
     // time it's applied, otherwise a status set before this rule existed (or reapplied via
     // bulk) could keep passing through without ever having a real quotation behind it.
     allowed = allowed.filter((l) => withEvidence.has(l.id));
+  }
+
+  if (input.status === "CONTACTED") {
+    // Bulk mode can't attach a new screenshot per lead, so only leads that already have
+    // verified evidence or a previously-uploaded proof pass through; the rest are skipped —
+    // mark them one at a time from the lead's own page to attach a screenshot.
+    const withEvidence = (
+      await Promise.all(allowed.map(async (l) => ((await hasAnyContactEvidence(l.id)) ? l.id : null)))
+    ).filter((id): id is string => id !== null);
+    const evidencedSet = new Set(withEvidence);
+    allowed = allowed.filter((l) => evidencedSet.has(l.id));
   }
 
   const data: Prisma.LeadUncheckedUpdateManyInput = {};

@@ -194,8 +194,12 @@ export function createFollowUp(token: string, input: { leadId: string; dueAt: st
   return request<FollowUpDTO>("/api/follow-ups", { method: "POST", body: JSON.stringify(input) }, token);
 }
 
-export function completeFollowUp(token: string, id: string, outcome?: string): Promise<FollowUpDTO> {
-  return request<FollowUpDTO>(`/api/follow-ups/${id}/complete`, { method: "PATCH", body: JSON.stringify({ outcome }) }, token);
+export function completeFollowUp(token: string, id: string, outcome?: string, evidenceImageUrl?: string): Promise<FollowUpDTO> {
+  return request<FollowUpDTO>(
+    `/api/follow-ups/${id}/complete`,
+    { method: "PATCH", body: JSON.stringify({ outcome, evidenceImageUrl }) },
+    token
+  );
 }
 
 export function listUsers(token: string): Promise<UserRefDTO[]> {

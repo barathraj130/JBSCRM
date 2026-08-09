@@ -43,6 +43,45 @@ export function recordEvidence(input: RecordEvidenceInput) {
   });
 }
 
+const VERIFIED_CONTACT_TYPES: EvidenceType[] = ["WHATSAPP_MESSAGE_SENT", "WHATSAPP_MESSAGE_RECEIVED", "CALL_LOGGED", "CATALOG_SENT"];
+
+/** True only for system-verified contact (in-app WhatsApp send/receive, catalog send, a VERIFIED call). */
+export async function hasVerifiedContactEvidence(leadId: string): Promise<boolean> {
+  const evidence = await prisma.evidence.findFirst({
+    where: { leadId, status: "VERIFIED", type: { in: VERIFIED_CONTACT_TYPES } },
+  });
+  return !!evidence;
+}
+
+/** Verified contact OR a previously-uploaded screenshot — used to avoid re-blocking a lead that already has proof. */
+export async function hasAnyContactEvidence(leadId: string): Promise<boolean> {
+  const evidence = await prisma.evidence.findFirst({
+    where: { leadId, type: { in: [...VERIFIED_CONTACT_TYPES, "CONTACT_PROOF_UPLOADED"] } },
+  });
+  return !!evidence;
+}
+
+export interface RecordContactProofInput {
+  customerId: string;
+  leadId?: string | null;
+  employeeId: string;
+  imageUrl: string;
+  note?: string;
+}
+
+/** Screenshot-backed self-report — stronger than a bare claim, but never presented as verified. */
+export function recordContactProof(input: RecordContactProofInput) {
+  return recordEvidence({
+    customerId: input.customerId,
+    leadId: input.leadId,
+    employeeId: input.employeeId,
+    type: "CONTACT_PROOF_UPLOADED",
+    status: "SELF_REPORTED",
+    refType: "Upload",
+    metadata: { imageUrl: input.imageUrl, note: input.note ?? null },
+  });
+}
+
 function getRangeBounds(range: ProductivityRange): { from: Date; to: Date } {
   const to = new Date();
   const from = new Date(to);
@@ -79,6 +118,7 @@ const ACTIONS_COVERED_BY_EVIDENCE = new Set([
   "note_edited",
   "call_logged_self_reported",
   "lead_imported_indiamart",
+  "contact_proof_uploaded",
 ]);
 
 export async function getCustomerTimeline(actor: RequestingUser, customerId: string): Promise<CustomerTimelineEntryDTO[]> {

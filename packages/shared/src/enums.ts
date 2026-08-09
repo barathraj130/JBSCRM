@@ -75,6 +75,7 @@ export const EvidenceType = {
   NOTE_ADDED: "NOTE_ADDED",
   CUSTOMER_CREATED: "CUSTOMER_CREATED",
   DEAL_WON: "DEAL_WON",
+  CONTACT_PROOF_UPLOADED: "CONTACT_PROOF_UPLOADED",
 } as const;
 export type EvidenceType = (typeof EvidenceType)[keyof typeof EvidenceType];
 
@@ -94,6 +95,7 @@ export const EVIDENCE_TYPE_LABELS: Record<EvidenceType, string> = {
   NOTE_ADDED: "Note added",
   CUSTOMER_CREATED: "Customer created",
   DEAL_WON: "Deal won",
+  CONTACT_PROOF_UPLOADED: "Contact proof uploaded",
 };
 
 export const EvidenceStatus = {

@@ -17,6 +17,7 @@ import { EditCustomerDialog } from "@/components/customers/edit-customer-dialog"
 import { WhatsAppPanel } from "@/components/customers/whatsapp-panel";
 import { AIPanel } from "@/components/customers/ai-panel";
 import { ContactTimeline } from "@/components/customers/contact-timeline";
+import { UploadEvidenceDialog } from "@/components/evidence/upload-evidence-dialog";
 import { useAuth } from "@/lib/auth-context";
 import * as api from "@/lib/api-client";
 import type { CustomerDetailDTO, LeadStatus, QuotationDTO, QuotationStatus } from "@indiamart-crm/shared";
@@ -57,6 +58,9 @@ export default function CustomerProfilePage() {
   const [quotations, setQuotations] = React.useState<QuotationDTO[]>([]);
   const [quotationsLoading, setQuotationsLoading] = React.useState(true);
 
+  type EvidenceTarget = { kind: "status"; leadId: string; status: LeadStatus } | { kind: "followup"; followUpId: string };
+  const [evidenceTarget, setEvidenceTarget] = React.useState<EvidenceTarget | null>(null);
+
   const fetchCustomer = React.useCallback(async () => {
     if (!token || !params.id) return;
     setLoading(true);
@@ -86,14 +90,18 @@ export default function CustomerProfilePage() {
       .finally(() => setQuotationsLoading(false));
   }, [token, params.id]);
 
-  async function handleStatusChange(leadId: string, status: LeadStatus) {
+  async function handleStatusChange(leadId: string, status: LeadStatus, evidenceImageUrl?: string) {
     if (!token || !customer) return;
     const previous = customer;
     setCustomer({ ...customer, leads: customer.leads.map((l) => (l.id === leadId ? { ...l, status } : l)) });
     try {
-      await api.updateLead(token, leadId, { status });
+      await api.updateLead(token, leadId, { status, evidenceImageUrl });
     } catch (err) {
       setCustomer(previous);
+      if (err instanceof api.ApiError && err.code === "EVIDENCE_REQUIRED") {
+        setEvidenceTarget({ kind: "status", leadId, status });
+        return;
+      }
       setError(err instanceof api.ApiError ? err.message : "Could not update status.");
     }
   }
@@ -153,13 +161,17 @@ export default function CustomerProfilePage() {
     }
   }
 
-  async function handleCompleteFollowUp(id: string) {
+  async function handleCompleteFollowUp(id: string, outcome?: string, evidenceImageUrl?: string) {
     if (!token || !customer) return;
     try {
-      const updated = await api.completeFollowUp(token, id);
+      const updated = await api.completeFollowUp(token, id, outcome, evidenceImageUrl);
       setCustomer({ ...customer, followUps: customer.followUps.map((f) => (f.id === id ? updated : f)) });
-    } catch {
-      setError("Could not update follow-up.");
+    } catch (err) {
+      if (err instanceof api.ApiError && err.code === "EVIDENCE_REQUIRED") {
+        setEvidenceTarget({ kind: "followup", followUpId: id });
+        return;
+      }
+      setError(err instanceof api.ApiError ? err.message : "Could not update follow-up.");
     }
   }
 
@@ -444,6 +456,22 @@ export default function CustomerProfilePage() {
       </Tabs>
 
       <EditCustomerDialog customer={customer} open={editOpen} onOpenChange={setEditOpen} onSaved={fetchCustomer} />
+
+      <UploadEvidenceDialog
+        open={evidenceTarget !== null}
+        onOpenChange={(v) => !v && setEvidenceTarget(null)}
+        title="Upload evidence of contact"
+        description="No verified WhatsApp message or call was found for this lead. Attach a screenshot (e.g. a personal WhatsApp/SMS conversation) as proof."
+        onUploaded={async (imageUrl) => {
+          if (!evidenceTarget) return;
+          if (evidenceTarget.kind === "status") {
+            await handleStatusChange(evidenceTarget.leadId, evidenceTarget.status, imageUrl);
+          } else {
+            await handleCompleteFollowUp(evidenceTarget.followUpId, undefined, imageUrl);
+          }
+          setEvidenceTarget(null);
+        }}
+      />
     </div>
   );
 }
