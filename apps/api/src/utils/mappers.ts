@@ -175,6 +175,7 @@ export function toQuotationDTO(
   return {
     id: quotation.id,
     customer: toCustomerRef(quotation.customer),
+    leadId: quotation.leadId,
     status: quotation.status,
     gstPercent: Number(quotation.gstPercent),
     discount: Number(quotation.discount),

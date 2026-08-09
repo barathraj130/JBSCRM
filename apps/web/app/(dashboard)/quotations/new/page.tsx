@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth-context";
 import * as api from "@/lib/api-client";
-import type { CustomerRefDTO, ProductDTO } from "@indiamart-crm/shared";
+import type { CustomerRefDTO, LeadDTO, ProductDTO } from "@indiamart-crm/shared";
 
 interface LineItem {
   key: string;
@@ -32,6 +32,9 @@ export default function NewQuotationPage() {
   const customerIdParam = searchParams.get("customerId");
 
   const [customer, setCustomer] = React.useState<CustomerRefDTO | null>(null);
+  const [leads, setLeads] = React.useState<LeadDTO[]>([]);
+  const [leadsLoading, setLeadsLoading] = React.useState(false);
+  const [selectedLeadId, setSelectedLeadId] = React.useState<string>("");
   const [phoneSearch, setPhoneSearch] = React.useState("");
   const [lookupError, setLookupError] = React.useState<string | null>(null);
   const [products, setProducts] = React.useState<ProductDTO[]>([]);
@@ -50,6 +53,29 @@ export default function NewQuotationPage() {
     if (!token || !customerIdParam) return;
     api.getCustomer(token, customerIdParam).then((c) => setCustomer(c));
   }, [token, customerIdParam]);
+
+  const fetchLeadsForCustomer = React.useCallback(
+    async (customerId: string) => {
+      if (!token) return;
+      setLeadsLoading(true);
+      try {
+        const detail = await api.getCustomer(token, customerId);
+        setLeads(detail.leads);
+        setSelectedLeadId(detail.leads.length === 1 ? detail.leads[0].id : "");
+      } finally {
+        setLeadsLoading(false);
+      }
+    },
+    [token]
+  );
+
+  React.useEffect(() => {
+    if (customer) fetchLeadsForCustomer(customer.id);
+    else {
+      setLeads([]);
+      setSelectedLeadId("");
+    }
+  }, [customer, fetchLeadsForCustomer]);
 
   async function handleLookup() {
     if (!token || !phoneSearch.trim()) return;
@@ -91,18 +117,23 @@ export default function NewQuotationPage() {
       setError("Add at least one item.");
       return;
     }
+    if (leads.length > 0 && !selectedLeadId) {
+      setError("Select which lead this quotation is for.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       const quotation = await api.createQuotation(token, {
         customerId: customer.id,
+        leadId: selectedLeadId || undefined,
         gstPercent: gstNum,
         discount: discountNum,
         items: validItems.map((i) => ({ productId: i.productId, name: i.name, quantity: i.quantity, unitPrice: i.unitPrice })),
       });
       router.push(`/quotations/${quotation.id}`);
-    } catch {
-      setError("Could not create quotation.");
+    } catch (err) {
+      setError(err instanceof api.ApiError ? err.message : "Could not create quotation.");
     } finally {
       setSubmitting(false);
     }
@@ -146,6 +177,42 @@ export default function NewQuotationPage() {
           )}
         </CardContent>
       </Card>
+
+      {customer && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-foreground">Lead</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {leadsLoading ? (
+              <p className="text-sm text-muted-foreground">Loading leads...</p>
+            ) : leads.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                This customer has no leads yet — the quotation will be linked to the customer only.
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                <Label>Which lead is this quotation for? *</Label>
+                <Select value={selectedLeadId} onValueChange={setSelectedLeadId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a lead" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {leads.map((l) => (
+                      <SelectItem key={l.id} value={l.id}>
+                        {l.productInterested ?? "General inquiry"} · {l.status}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Marking this lead as &ldquo;Quotation Sent&rdquo; later requires this quotation to be linked to it.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -242,7 +309,7 @@ export default function NewQuotationPage() {
       </Card>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
-      <Button onClick={handleSubmit} disabled={!customer || submitting} className="w-full">
+      <Button onClick={handleSubmit} disabled={!customer || submitting || (leads.length > 0 && !selectedLeadId)} className="w-full">
         {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
         Save quotation
       </Button>

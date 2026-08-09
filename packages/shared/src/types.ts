@@ -219,6 +219,7 @@ export interface QuotationItemDTO {
 export interface QuotationDTO {
   id: string;
   customer: CustomerRefDTO;
+  leadId: string | null;
   status: QuotationStatus;
   gstPercent: number;
   discount: number;
