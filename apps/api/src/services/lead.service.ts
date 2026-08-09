@@ -173,7 +173,7 @@ export async function updateLead(actor: RequestingUser, leadId: string, input: U
     throw new HttpError(403, "Only managers and admins can reassign leads");
   }
 
-  if (input.status === "QUOTATION_SENT" && lead.status !== "QUOTATION_SENT") {
+  if (input.status === "QUOTATION_SENT") {
     await assertQuotationSentEvidence(leadId);
   }
 
@@ -268,7 +268,10 @@ export async function bulkUpdateLeads(actor: RequestingUser, input: BulkUpdateLe
         (e) => e.leadId
       )
     );
-    allowed = allowed.filter((l) => l.status === "QUOTATION_SENT" || withEvidence.has(l.id));
+    // No exception for leads already sitting at this status — evidence is required every
+    // time it's applied, otherwise a status set before this rule existed (or reapplied via
+    // bulk) could keep passing through without ever having a real quotation behind it.
+    allowed = allowed.filter((l) => withEvidence.has(l.id));
   }
 
   const data: Prisma.LeadUncheckedUpdateManyInput = {};
