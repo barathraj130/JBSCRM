@@ -5,31 +5,54 @@ import type {
   AISummarizeResponse,
   AINextBestActionResponse,
   AITranslateResponse,
+  AuditLogDTO,
+  AuditLogFilter,
+  AuditLogPageDTO,
   AuthUserDTO,
   AutomationStatusDTO,
   BulkUpdateLeadsInput,
+  CallDTO,
+  CatalogDTO,
+  CategoryDTO,
+  CreateCallInput,
+  CreateCatalogInput,
+  CreateCategoryInput,
   CreateEmployeeInput,
+  CustomerDuplicateAttemptDTO,
   CreateLeadInput,
   CreateProductInput,
   CreateQuotationInput,
   CreateWhatsAppTemplateInput,
   CustomerDetailDTO,
   CustomerRefDTO,
+  CustomerTimelineEntryDTO,
   DashboardSummaryDTO,
+  EmployeePermissionsDTO,
   FollowUpDTO,
+  LeadAssignmentHistoryDTO,
   LeadDTO,
   LeadStatus,
   LoginResponseDTO,
   NoteDTO,
   NotificationDTO,
   ProductDTO,
+  ProductivityDrilldownRowDTO,
+  ProductivityMetricKey,
+  ProductivityRange,
+  ProductivityScoreConfigDTO,
+  ProductivitySummaryDTO,
   QuotationDTO,
   ReportSummaryDTO,
   SystemLogDTO,
+  UncontactedLeadAlertDTO,
+  UpdateCatalogInput,
+  UpdateCategoryInput,
   UpdateCustomerInput,
   UpdateEmployeeInput,
+  UpdateEmployeePermissionsInput,
   UpdateLeadInput,
   UpdateProductInput,
+  UpdateProductivityScoreConfigInput,
   UserRefDTO,
   WhatsAppMessageDTO,
   WhatsAppTemplateDTO,
@@ -201,13 +224,13 @@ export async function uploadFile(token: string, file: File): Promise<{ url: stri
 
 export interface ListProductsParams {
   q?: string;
-  category?: string;
+  categoryId?: string;
 }
 
 export function listProducts(token: string, params: ListProductsParams = {}): Promise<ProductDTO[]> {
   const query = new URLSearchParams();
   if (params.q) query.set("q", params.q);
-  if (params.category) query.set("category", params.category);
+  if (params.categoryId) query.set("categoryId", params.categoryId);
   const qs = query.toString();
   return request<ProductDTO[]>(`/api/products${qs ? `?${qs}` : ""}`, {}, token);
 }
@@ -357,4 +380,144 @@ export function updateWhatsAppTemplate(token: string, id: string, input: Partial
 
 export function deleteWhatsAppTemplate(token: string, id: string): Promise<void> {
   return request<void>(`/api/whatsapp-templates/${id}`, { method: "DELETE" }, token);
+}
+
+// ---- Evidence, timeline, calls ----
+
+export function getCustomerTimeline(token: string, customerId: string): Promise<CustomerTimelineEntryDTO[]> {
+  return request<CustomerTimelineEntryDTO[]>(`/api/customers/${customerId}/timeline`, {}, token);
+}
+
+export function listCalls(token: string, customerId: string): Promise<CallDTO[]> {
+  return request<CallDTO[]>(`/api/customers/${customerId}/calls`, {}, token);
+}
+
+export function logCall(token: string, customerId: string, input: Omit<CreateCallInput, "customerId">): Promise<CallDTO> {
+  return request<CallDTO>(`/api/customers/${customerId}/calls`, { method: "POST", body: JSON.stringify(input) }, token);
+}
+
+export function editNote(token: string, customerId: string, noteId: string, body: string): Promise<NoteDTO> {
+  return request<NoteDTO>(`/api/customers/${customerId}/notes/${noteId}`, { method: "PATCH", body: JSON.stringify({ body }) }, token);
+}
+
+// ---- Lead assignment history & uncontacted alerts ----
+
+export function getLeadAssignmentHistory(token: string, leadId: string): Promise<LeadAssignmentHistoryDTO[]> {
+  return request<LeadAssignmentHistoryDTO[]>(`/api/leads/${leadId}/assignment-history`, {}, token);
+}
+
+export function getUncontactedLeadAlerts(token: string): Promise<UncontactedLeadAlertDTO[]> {
+  return request<UncontactedLeadAlertDTO[]>("/api/leads/uncontacted-alerts", {}, token);
+}
+
+// ---- Productivity ----
+
+export function getProductivitySummary(token: string, employeeId: string, range: ProductivityRange): Promise<ProductivitySummaryDTO> {
+  return request<ProductivitySummaryDTO>(`/api/productivity/${employeeId}?range=${range}`, {}, token);
+}
+
+export function getProductivityDrilldown(
+  token: string,
+  employeeId: string,
+  metric: ProductivityMetricKey,
+  range: ProductivityRange
+): Promise<ProductivityDrilldownRowDTO[]> {
+  return request<ProductivityDrilldownRowDTO[]>(`/api/productivity/${employeeId}/drilldown?metric=${metric}&range=${range}`, {}, token);
+}
+
+// ---- Audit logs ----
+
+export function listAuditLogs(token: string, filter: AuditLogFilter = {}): Promise<AuditLogPageDTO> {
+  const query = new URLSearchParams();
+  if (filter.userId) query.set("userId", filter.userId);
+  if (filter.action) query.set("action", filter.action);
+  if (filter.objectType) query.set("objectType", filter.objectType);
+  if (filter.from) query.set("from", filter.from);
+  if (filter.to) query.set("to", filter.to);
+  if (filter.page) query.set("page", String(filter.page));
+  if (filter.pageSize) query.set("pageSize", String(filter.pageSize));
+  const qs = query.toString();
+  return request<AuditLogPageDTO>(`/api/audit-logs${qs ? `?${qs}` : ""}`, {}, token);
+}
+
+export type { AuditLogDTO };
+
+// ---- Categories & Catalogs ----
+
+export function listCategories(token: string): Promise<CategoryDTO[]> {
+  return request<CategoryDTO[]>("/api/categories", {}, token);
+}
+
+export function createCategory(token: string, input: CreateCategoryInput): Promise<CategoryDTO> {
+  return request<CategoryDTO>("/api/categories", { method: "POST", body: JSON.stringify(input) }, token);
+}
+
+export function updateCategory(token: string, id: string, input: UpdateCategoryInput): Promise<CategoryDTO> {
+  return request<CategoryDTO>(`/api/categories/${id}`, { method: "PATCH", body: JSON.stringify(input) }, token);
+}
+
+export function deleteCategory(token: string, id: string): Promise<void> {
+  return request<void>(`/api/categories/${id}`, { method: "DELETE" }, token);
+}
+
+export function listCatalogs(token: string): Promise<CatalogDTO[]> {
+  return request<CatalogDTO[]>("/api/catalogs", {}, token);
+}
+
+export function createCatalog(token: string, input: CreateCatalogInput): Promise<CatalogDTO> {
+  return request<CatalogDTO>("/api/catalogs", { method: "POST", body: JSON.stringify(input) }, token);
+}
+
+export function updateCatalog(token: string, id: string, input: UpdateCatalogInput): Promise<CatalogDTO> {
+  return request<CatalogDTO>(`/api/catalogs/${id}`, { method: "PATCH", body: JSON.stringify(input) }, token);
+}
+
+export function deleteCatalog(token: string, id: string): Promise<void> {
+  return request<void>(`/api/catalogs/${id}`, { method: "DELETE" }, token);
+}
+
+// ---- Permissions ----
+
+export function getEmployeePermissions(token: string, employeeId: string): Promise<EmployeePermissionsDTO> {
+  return request<EmployeePermissionsDTO>(`/api/admin/employees/${employeeId}/permissions`, {}, token);
+}
+
+export function updateEmployeePermissions(
+  token: string,
+  employeeId: string,
+  input: UpdateEmployeePermissionsInput
+): Promise<EmployeePermissionsDTO> {
+  return request<EmployeePermissionsDTO>(
+    `/api/admin/employees/${employeeId}/permissions`,
+    { method: "PATCH", body: JSON.stringify(input) },
+    token
+  );
+}
+
+// ---- Productivity score config ----
+
+export function listScoreConfig(token: string): Promise<ProductivityScoreConfigDTO[]> {
+  return request<ProductivityScoreConfigDTO[]>("/api/admin/score-config", {}, token);
+}
+
+export function updateScoreConfig(token: string, input: UpdateProductivityScoreConfigInput): Promise<ProductivityScoreConfigDTO[]> {
+  return request<ProductivityScoreConfigDTO[]>("/api/admin/score-config", { method: "PATCH", body: JSON.stringify(input) }, token);
+}
+
+// ---- Additional report exports ----
+
+export function exportEvidenceReportCsv(token: string, from: string, to: string): Promise<Blob> {
+  return fetchBlob(`/api/reports/evidence.csv?from=${from}&to=${to}`, token);
+}
+
+export function exportAuditLogCsv(token: string, from: string, to: string): Promise<Blob> {
+  return fetchBlob(`/api/reports/audit-log.csv?from=${from}&to=${to}`, token);
+}
+
+export function logout(token: string): Promise<void> {
+  return request<void>("/api/auth/logout", { method: "POST" }, token);
+}
+
+export function listDuplicateAttempts(token: string): Promise<CustomerDuplicateAttemptDTO[]> {
+  return request<CustomerDuplicateAttemptDTO[]>("/api/admin/duplicate-attempts", {}, token);
 }

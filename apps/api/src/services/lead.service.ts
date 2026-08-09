@@ -1,11 +1,13 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DuplicateCustomerError, HttpError } from "@/middleware/errorHandler";
-import { toLeadDTO } from "@/utils/mappers";
+import { toLeadDTO, toLeadAssignmentHistoryDTO } from "@/utils/mappers";
 import { getVisibleUserIds, type RequestingUser } from "@/utils/leadScope";
 import { logActivity } from "@/services/activityLog.service";
 import { createNotification } from "@/services/notification.service";
-import type { BulkUpdateLeadsInput, CreateLeadInput, LeadStatus, UpdateLeadInput } from "@indiamart-crm/shared";
+import { recordEvidence } from "@/services/evidence.service";
+import { env } from "@/lib/env";
+import type { BulkUpdateLeadsInput, CreateLeadInput, LeadStatus, UpdateLeadInput, UncontactedLeadAlertDTO } from "@indiamart-crm/shared";
 
 const leadInclude = { customer: true, assignedTo: true } satisfies Prisma.LeadInclude;
 
@@ -59,6 +61,9 @@ export async function listLeads(actor: RequestingUser, filter: ListLeadsFilter) 
 export async function createLead(actor: RequestingUser, input: CreateLeadInput) {
   const existing = await prisma.customer.findUnique({ where: { phone: input.phone } });
   if (existing) {
+    await prisma.customerDuplicateAttempt.create({
+      data: { phone: input.phone, attemptedById: actor.id, existingCustomerId: existing.id },
+    });
     throw new DuplicateCustomerError(existing.id);
   }
 
@@ -87,6 +92,39 @@ export async function createLead(actor: RequestingUser, input: CreateLeadInput) 
 
   if (input.notes) {
     await prisma.note.create({ data: { customerId: customer.id, authorId: actor.id, body: input.notes } });
+    await recordEvidence({
+      customerId: customer.id,
+      leadId: lead.id,
+      employeeId: actor.id,
+      type: "NOTE_ADDED",
+      status: "VERIFIED",
+      refType: "Note",
+    });
+  }
+
+  await recordEvidence({
+    customerId: customer.id,
+    leadId: lead.id,
+    employeeId: actor.id,
+    type: "CUSTOMER_CREATED",
+    status: "VERIFIED",
+    refType: "Customer",
+    refId: customer.id,
+  });
+
+  if (assignedToId) {
+    await prisma.leadAssignmentHistory.create({
+      data: { leadId: lead.id, fromUserId: null, toUserId: assignedToId, changedById: actor.id },
+    });
+    await recordEvidence({
+      customerId: customer.id,
+      leadId: lead.id,
+      employeeId: assignedToId,
+      type: "LEAD_ASSIGNED",
+      status: "VERIFIED",
+      refType: "Lead",
+      refId: lead.id,
+    });
   }
 
   await logActivity("lead", lead.id, actor.id, "lead_created", { customerId: customer.id });
@@ -124,6 +162,29 @@ export async function updateLead(actor: RequestingUser, leadId: string, input: U
   if (input.status && input.status !== lead.status) {
     data.status = input.status;
     await logActivity("lead", leadId, actor.id, "status_changed", { from: lead.status, to: input.status });
+    await recordEvidence({
+      customerId: lead.customerId,
+      leadId,
+      employeeId: actor.id,
+      type: "LEAD_STATUS_CHANGED",
+      status: "VERIFIED",
+      refType: "Lead",
+      refId: leadId,
+      metadata: { from: lead.status, to: input.status },
+    });
+
+    if (input.status === "WON") {
+      await recordEvidence({
+        customerId: lead.customerId,
+        leadId,
+        employeeId: lead.assignedToId ?? actor.id,
+        type: "DEAL_WON",
+        status: "VERIFIED",
+        refType: "Lead",
+        refId: leadId,
+        metadata: { dealValue: lead.dealValue ? Number(lead.dealValue) : null },
+      });
+    }
 
     if (lead.assignedToId && (input.status === "WON" || input.status === "LOST")) {
       await createNotification(
@@ -137,6 +198,23 @@ export async function updateLead(actor: RequestingUser, leadId: string, input: U
   if (input.assignedToId !== undefined && input.assignedToId !== lead.assignedToId) {
     data.assignedTo = input.assignedToId ? { connect: { id: input.assignedToId } } : { disconnect: true };
     await logActivity("lead", leadId, actor.id, "reassigned", { from: lead.assignedToId, to: input.assignedToId });
+
+    await prisma.leadAssignmentHistory.create({
+      data: { leadId, fromUserId: lead.assignedToId, toUserId: input.assignedToId ?? null, changedById: actor.id },
+    });
+
+    if (input.assignedToId) {
+      await recordEvidence({
+        customerId: lead.customerId,
+        leadId,
+        employeeId: input.assignedToId,
+        type: "LEAD_REASSIGNED",
+        status: "VERIFIED",
+        refType: "Lead",
+        refId: leadId,
+        metadata: { from: lead.assignedToId, to: input.assignedToId },
+      });
+    }
 
     if (input.assignedToId && input.assignedToId !== actor.id) {
       await createNotification(input.assignedToId, "NEW_LEAD", `Lead assigned to you: ${lead.customer.name}`, {
@@ -176,10 +254,59 @@ export async function bulkUpdateLeads(actor: RequestingUser, input: BulkUpdateLe
   await prisma.lead.updateMany({ where: { id: { in: allowed.map((l) => l.id) } }, data });
 
   await Promise.all(
-    allowed.map((l) =>
-      logActivity("lead", l.id, actor.id, "bulk_update", { status: input.status, assignedToId: input.assignedToId })
-    )
+    allowed.map(async (l) => {
+      await logActivity("lead", l.id, actor.id, "bulk_update", { status: input.status, assignedToId: input.assignedToId });
+      if (input.assignedToId !== undefined && input.assignedToId !== l.assignedToId) {
+        await prisma.leadAssignmentHistory.create({
+          data: { leadId: l.id, fromUserId: l.assignedToId, toUserId: input.assignedToId ?? null, changedById: actor.id },
+        });
+      }
+    })
   );
 
   return { updated: allowed.length };
+}
+
+export async function getAssignmentHistory(actor: RequestingUser, leadId: string) {
+  await assertLeadAccess(actor, leadId);
+  const rows = await prisma.leadAssignmentHistory.findMany({
+    where: { leadId },
+    include: { fromUser: true, toUser: true, changedBy: true },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map(toLeadAssignmentHistoryDTO);
+}
+
+export async function getUncontactedLeadAlerts(actor: RequestingUser): Promise<UncontactedLeadAlertDTO[]> {
+  const visibleUserIds = await getVisibleUserIds(actor);
+  const thresholdMs = env.uncontactedLeadAlertMinutes * 60 * 1000;
+  const cutoff = new Date(Date.now() - thresholdMs);
+
+  const where: Prisma.LeadWhereInput = {
+    status: "NEW",
+    createdAt: { lte: cutoff },
+  };
+  if (visibleUserIds) where.assignedToId = { in: visibleUserIds };
+
+  const candidates = await prisma.lead.findMany({ where, include: leadInclude, orderBy: { createdAt: "asc" } });
+  if (candidates.length === 0) return [];
+
+  const contactedLeadIds = new Set(
+    (
+      await prisma.evidence.findMany({
+        where: { leadId: { in: candidates.map((l) => l.id) }, status: "VERIFIED" },
+        select: { leadId: true },
+      })
+    )
+      .map((e) => e.leadId)
+      .filter((id): id is string => id !== null)
+  );
+
+  const now = Date.now();
+  return candidates
+    .filter((l) => !contactedLeadIds.has(l.id))
+    .map((l) => ({
+      lead: toLeadDTO(l),
+      minutesSinceCreated: Math.round((now - l.createdAt.getTime()) / 60000),
+    }));
 }

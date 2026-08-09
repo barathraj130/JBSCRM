@@ -1,10 +1,19 @@
 import type {
   ActivityLog,
+  AuditLog,
+  Call,
+  Catalog,
+  CatalogProduct,
+  Category,
   Customer,
+  CustomerDuplicateAttempt,
+  Evidence,
   FollowUp,
   Lead,
+  LeadAssignmentHistory,
   Note,
   Product,
+  ProductivityScoreConfig,
   Quotation,
   QuotationItem,
   User,
@@ -14,11 +23,20 @@ import type {
 import type {
   ActivityLogDTO,
   AdminUserDTO,
+  AuditLogDTO,
+  CallDTO,
+  CatalogDTO,
+  CategoryDTO,
+  CategoryRefDTO,
+  CustomerDuplicateAttemptDTO,
   CustomerRefDTO,
+  EvidenceDTO,
   FollowUpDTO,
+  LeadAssignmentHistoryDTO,
   LeadDTO,
   NoteDTO,
   ProductDTO,
+  ProductivityScoreConfigDTO,
   QuotationDTO,
   QuotationItemDTO,
   SystemLogDTO,
@@ -26,6 +44,7 @@ import type {
   WhatsAppMessageDTO,
   WhatsAppTemplateDTO,
 } from "@indiamart-crm/shared";
+import { EVIDENCE_TYPE_LABELS, type EvidenceType } from "@indiamart-crm/shared";
 
 export function toUserRef(user: Pick<User, "id" | "name" | "role"> | null): UserRefDTO | null {
   if (!user) return null;
@@ -53,6 +72,8 @@ export function toLeadDTO(lead: Lead & { customer: Customer; assignedTo: User | 
     status: lead.status,
     assignedTo: toUserRef(lead.assignedTo),
     dealValue: lead.dealValue ? Number(lead.dealValue) : null,
+    externalLeadId: lead.externalLeadId,
+    rawSourcePayload: (lead.rawSourcePayload as Record<string, unknown> | null) ?? null,
     createdAt: lead.createdAt.toISOString(),
     updatedAt: lead.updatedAt.toISOString(),
   };
@@ -64,6 +85,8 @@ export function toNoteDTO(note: Note & { author: User | null }): NoteDTO {
     body: note.body,
     author: toUserRef(note.author),
     createdAt: note.createdAt.toISOString(),
+    isEdited: note.previousVersionId !== null,
+    previousVersionId: note.previousVersionId,
   };
 }
 
@@ -80,20 +103,56 @@ export function toFollowUpDTO(followUp: FollowUp & { user: User | null }): Follo
   };
 }
 
-export function toProductDTO(product: Product): ProductDTO {
+export function toCategoryRef(category: (Category & { parent: Category | null }) | null): CategoryRefDTO | null {
+  if (!category) return null;
+  return {
+    id: category.id,
+    name: category.name,
+    parentId: category.parentId,
+    path: category.parent ? `${category.parent.name} > ${category.name}` : category.name,
+  };
+}
+
+export function toCategoryDTO(category: Category & { children?: Category[] }): CategoryDTO {
+  return {
+    id: category.id,
+    name: category.name,
+    parentId: category.parentId,
+    children: (category.children ?? []).map((c) => toCategoryDTO(c)),
+    createdAt: category.createdAt.toISOString(),
+  };
+}
+
+export function toProductDTO(product: Product & { category: (Category & { parent: Category | null }) | null }): ProductDTO {
   return {
     id: product.id,
     name: product.name,
     description: product.description,
     price: Number(product.price),
     stock: product.stock,
-    category: product.category,
-    subcategory: product.subcategory,
+    category: toCategoryRef(product.category),
     images: product.images,
     videos: product.videos,
     brochureUrl: product.brochureUrl,
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
+  };
+}
+
+export function toCatalogDTO(
+  catalog: Catalog & {
+    category: (Category & { parent: Category | null }) | null;
+    products: (CatalogProduct & { product: Product & { category: (Category & { parent: Category | null }) | null } })[];
+  }
+): CatalogDTO {
+  return {
+    id: catalog.id,
+    name: catalog.name,
+    description: catalog.description,
+    category: toCategoryRef(catalog.category),
+    products: catalog.products.map((cp) => toProductDTO(cp.product)),
+    createdAt: catalog.createdAt.toISOString(),
+    updatedAt: catalog.updatedAt.toISOString(),
   };
 }
 
@@ -135,6 +194,7 @@ export function toWhatsAppMessageDTO(message: WhatsAppMessage & { sentBy: User |
     direction: message.direction,
     body: message.body,
     mediaUrl: message.mediaUrl,
+    catalogId: message.catalogId,
     sentBy: toUserRef(message.sentBy),
     createdAt: message.createdAt.toISOString(),
   };
@@ -182,5 +242,88 @@ export function toWhatsAppTemplateDTO(template: WhatsAppTemplate): WhatsAppTempl
     body: template.body,
     createdAt: template.createdAt.toISOString(),
     updatedAt: template.updatedAt.toISOString(),
+  };
+}
+
+export function toEvidenceDTO(evidence: Evidence & { employee: User | null }): EvidenceDTO {
+  return {
+    id: evidence.id,
+    customerId: evidence.customerId,
+    leadId: evidence.leadId,
+    employee: toUserRef(evidence.employee),
+    type: evidence.type,
+    status: evidence.status,
+    refType: evidence.refType,
+    refId: evidence.refId,
+    occurredAt: evidence.occurredAt.toISOString(),
+    metadata: (evidence.metadata as Record<string, unknown> | null) ?? null,
+    createdAt: evidence.createdAt.toISOString(),
+  };
+}
+
+export function toCallDTO(call: Call & { employee: User | null }): CallDTO {
+  return {
+    id: call.id,
+    customerId: call.customerId,
+    employee: toUserRef(call.employee),
+    direction: call.direction,
+    startedAt: call.startedAt.toISOString(),
+    endedAt: call.endedAt ? call.endedAt.toISOString() : null,
+    durationSeconds: call.durationSeconds,
+    status: call.status,
+    outcome: call.outcome,
+    recordingRef: call.recordingRef,
+    isSelfReported: true,
+    createdAt: call.createdAt.toISOString(),
+  };
+}
+
+export function toLeadAssignmentHistoryDTO(
+  entry: LeadAssignmentHistory & { fromUser: User | null; toUser: User | null; changedBy: User | null }
+): LeadAssignmentHistoryDTO {
+  return {
+    id: entry.id,
+    fromUser: toUserRef(entry.fromUser),
+    toUser: toUserRef(entry.toUser),
+    changedBy: toUserRef(entry.changedBy),
+    reason: entry.reason,
+    createdAt: entry.createdAt.toISOString(),
+  };
+}
+
+export function toCustomerDuplicateAttemptDTO(
+  attempt: CustomerDuplicateAttempt & { attemptedBy: User | null }
+): CustomerDuplicateAttemptDTO {
+  return {
+    id: attempt.id,
+    phone: attempt.phone,
+    attemptedBy: toUserRef(attempt.attemptedBy),
+    existingCustomerId: attempt.existingCustomerId,
+    createdAt: attempt.createdAt.toISOString(),
+  };
+}
+
+export function toAuditLogDTO(log: AuditLog): AuditLogDTO {
+  return {
+    id: log.id,
+    actorName: log.actorName,
+    actorEmail: log.actorEmail,
+    action: log.action,
+    objectType: log.objectType,
+    objectId: log.objectId,
+    oldValue: log.oldValue,
+    newValue: log.newValue,
+    source: log.source,
+    ipAddress: log.ipAddress,
+    createdAt: log.createdAt.toISOString(),
+  };
+}
+
+export function toProductivityScoreConfigDTO(config: ProductivityScoreConfig): ProductivityScoreConfigDTO {
+  return {
+    key: config.key,
+    label: EVIDENCE_TYPE_LABELS[config.key as EvidenceType] ?? config.key,
+    points: config.points,
+    updatedAt: config.updatedAt.toISOString(),
   };
 }

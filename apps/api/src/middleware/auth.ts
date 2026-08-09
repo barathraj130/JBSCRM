@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
-import type { Role } from "@indiamart-crm/shared";
+import type { PermissionKey, Role } from "@indiamart-crm/shared";
 import { verifyAccessToken } from "@/utils/jwt";
+import { hasCapability } from "@/services/permissions.service";
 
 export interface AuthedRequest extends Request {
   user?: { id: string; role: Role };
@@ -28,6 +29,19 @@ export function requireRole(...roles: Role[]) {
       return res.status(401).json({ error: "Unauthenticated" });
     }
     if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ error: "Insufficient permissions" });
+    }
+    next();
+  };
+}
+
+export function requireCapability(key: PermissionKey) {
+  return async (req: AuthedRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthenticated" });
+    }
+    const allowed = await hasCapability(req.user.id, req.user.role, key);
+    if (!allowed) {
       return res.status(403).json({ error: "Insufficient permissions" });
     }
     next();

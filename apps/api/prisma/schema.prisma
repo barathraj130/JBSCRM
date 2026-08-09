@@ -49,6 +49,35 @@ enum NotificationType {
   CUSTOMER_REPLY
   DEAL_WON
   DEAL_LOST
+  UNCONTACTED_LEAD_ALERT
+}
+
+enum EvidenceType {
+  LEAD_IMPORTED
+  LEAD_ASSIGNED
+  LEAD_REASSIGNED
+  LEAD_STATUS_CHANGED
+  WHATSAPP_MESSAGE_SENT
+  WHATSAPP_MESSAGE_RECEIVED
+  CATALOG_SENT
+  CALL_LOGGED
+  QUOTATION_CREATED
+  QUOTATION_SENT
+  FOLLOW_UP_SCHEDULED
+  FOLLOW_UP_COMPLETED
+  NOTE_ADDED
+  CUSTOMER_CREATED
+  DEAL_WON
+}
+
+enum EvidenceStatus {
+  VERIFIED
+  SELF_REPORTED
+}
+
+enum CallDirection {
+  INCOMING
+  OUTGOING
 }
 
 model User {
@@ -65,13 +94,24 @@ model User {
   manager   User?   @relation("ManagerReports", fields: [managerId], references: [id], onDelete: SetNull)
   reports   User[]  @relation("ManagerReports")
 
-  assignedLeads   Lead[]           @relation("AssignedLeads")
-  activityLogs    ActivityLog[]
-  followUps       FollowUp[]
-  quotationsMade  Quotation[]
-  whatsAppSent    WhatsAppMessage[]
-  notes           Note[]
-  notifications   Notification[]
+  assignedLeads  Lead[]            @relation("AssignedLeads")
+  activityLogs   ActivityLog[]
+  followUps      FollowUp[]
+  quotationsMade Quotation[]
+  whatsAppSent   WhatsAppMessage[]
+  notes          Note[]
+  notifications  Notification[]
+
+  evidenceEntries         Evidence[]
+  calls                   Call[]
+  auditLogs               AuditLog[]
+  duplicateAttempts       CustomerDuplicateAttempt[]
+  permissionOverrides     UserPermission[]           @relation("PermissionOwner")
+  permissionOverridesMade UserPermission[]           @relation("PermissionEditor")
+  scoreConfigUpdates      ProductivityScoreConfig[]
+  assignmentsFrom         LeadAssignmentHistory[]    @relation("AssignmentFrom")
+  assignmentsTo           LeadAssignmentHistory[]    @relation("AssignmentTo")
+  assignmentsChanged      LeadAssignmentHistory[]    @relation("AssignmentChangedBy")
 
   @@map("users")
 }
@@ -88,10 +128,13 @@ model Customer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  leads            Lead[]
-  quotations       Quotation[]
-  whatsAppMessages WhatsAppMessage[]
-  notesList        Note[]
+  leads             Lead[]
+  quotations        Quotation[]
+  whatsAppMessages  WhatsAppMessage[]
+  notesList         Note[]
+  evidenceEntries   Evidence[]
+  calls             Call[]
+  duplicateAttempts CustomerDuplicateAttempt[]
 
   @@index([name])
   @@map("customers")
@@ -106,25 +149,33 @@ model Note {
   body       String
   createdAt  DateTime @default(now())
 
+  previousVersionId String? @unique
+  previousVersion   Note?   @relation("NoteVersionChain", fields: [previousVersionId], references: [id])
+  supersededBy      Note?   @relation("NoteVersionChain")
+
   @@index([customerId])
   @@map("notes")
 }
 
 model Lead {
-  id                 String     @id @default(cuid())
-  customerId         String
-  customer           Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  productInterested  String?
-  source             String     @default("IndiaMART")
-  status             LeadStatus @default(NEW)
-  assignedToId       String?
-  assignedTo         User?      @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
-  dealValue          Decimal?   @db.Decimal(12, 2)
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  id                String     @id @default(cuid())
+  customerId        String
+  customer          Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  productInterested String?
+  source            String     @default("IndiaMART")
+  status            LeadStatus @default(NEW)
+  assignedToId      String?
+  assignedTo        User?      @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
+  dealValue         Decimal?   @db.Decimal(12, 2)
+  externalLeadId    String?    @unique
+  rawSourcePayload  Json?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 
-  followUps  FollowUp[]
-  quotations Quotation[]
+  followUps         FollowUp[]
+  quotations        Quotation[]
+  evidenceEntries   Evidence[]
+  assignmentHistory LeadAssignmentHistory[]
 
   @@index([status])
   @@index([assignedToId])
@@ -145,6 +196,100 @@ model ActivityLog {
   @@map("activity_logs")
 }
 
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  actorName  String
+  actorEmail String?
+  action     String
+  objectType String
+  objectId   String?
+  oldValue   Json?
+  newValue   Json?
+  source     String   @default("web")
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([objectType, objectId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Evidence {
+  id         String         @id @default(cuid())
+  customerId String
+  customer   Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  leadId     String?
+  lead       Lead?          @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  employeeId String?
+  employee   User?          @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  type       EvidenceType
+  status     EvidenceStatus
+  refType    String
+  refId      String?
+  occurredAt DateTime       @default(now())
+  metadata   Json?
+  createdAt  DateTime       @default(now())
+
+  @@index([employeeId, occurredAt])
+  @@index([customerId])
+  @@index([type, status])
+  @@map("evidence")
+}
+
+model Call {
+  id              String        @id @default(cuid())
+  customerId      String
+  customer        Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  employeeId      String?
+  employee        User?         @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  direction       CallDirection
+  startedAt       DateTime
+  endedAt         DateTime?
+  durationSeconds Int?
+  status          String
+  outcome         String?
+  recordingRef    String?
+  createdAt       DateTime      @default(now())
+
+  @@index([customerId])
+  @@index([employeeId])
+  @@map("calls")
+}
+
+model LeadAssignmentHistory {
+  id          String   @id @default(cuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  fromUserId  String?
+  fromUser    User?    @relation("AssignmentFrom", fields: [fromUserId], references: [id], onDelete: SetNull)
+  toUserId    String?
+  toUser      User?    @relation("AssignmentTo", fields: [toUserId], references: [id], onDelete: SetNull)
+  changedById String?
+  changedBy   User?    @relation("AssignmentChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  @@index([leadId])
+  @@map("lead_assignment_history")
+}
+
+model CustomerDuplicateAttempt {
+  id                 String   @id @default(cuid())
+  phone              String
+  attemptedById      String?
+  attemptedBy        User?    @relation(fields: [attemptedById], references: [id], onDelete: SetNull)
+  existingCustomerId String
+  existingCustomer   Customer @relation(fields: [existingCustomerId], references: [id], onDelete: Cascade)
+  createdAt          DateTime @default(now())
+
+  @@index([existingCustomerId])
+  @@map("customer_duplicate_attempts")
+}
+
 model FollowUp {
   id        String         @id @default(cuid())
   leadId    String
@@ -162,41 +307,84 @@ model FollowUp {
   @@map("follow_ups")
 }
 
+model Category {
+  id        String     @id @default(cuid())
+  name      String
+  parentId  String?
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Category[] @relation("CategoryTree")
+  createdAt DateTime   @default(now())
+
+  products Product[]
+  catalogs Catalog[]
+
+  @@index([parentId])
+  @@map("categories")
+}
+
 model Product {
   id          String   @id @default(cuid())
   name        String
   description String?
   price       Decimal  @db.Decimal(12, 2)
   stock       Int      @default(0)
-  category    String
-  subcategory String?
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
   images      String[]
   videos      String[]
   brochureUrl String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  quotationItems QuotationItem[]
+  quotationItems  QuotationItem[]
+  catalogProducts CatalogProduct[]
 
-  @@index([category])
+  @@index([categoryId])
   @@map("products")
 }
 
+model Catalog {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  products         CatalogProduct[]
+  whatsAppMessages WhatsAppMessage[]
+
+  @@index([categoryId])
+  @@map("catalogs")
+}
+
+model CatalogProduct {
+  id        String  @id @default(cuid())
+  catalogId String
+  catalog   Catalog @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([catalogId, productId])
+  @@map("catalog_products")
+}
+
 model Quotation {
-  id         String           @id @default(cuid())
-  customerId String
-  customer   Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  leadId     String?
-  lead       Lead?            @relation(fields: [leadId], references: [id])
+  id          String          @id @default(cuid())
+  customerId  String
+  customer    Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  leadId      String?
+  lead        Lead?           @relation(fields: [leadId], references: [id])
   createdById String?
   createdBy   User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  status     QuotationStatus  @default(DRAFT)
-  gstPercent Decimal          @default(18) @db.Decimal(5, 2)
-  discount   Decimal          @default(0) @db.Decimal(12, 2)
-  total      Decimal          @default(0) @db.Decimal(12, 2)
-  pdfUrl     String?
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
+  status      QuotationStatus @default(DRAFT)
+  gstPercent  Decimal         @default(18) @db.Decimal(5, 2)
+  discount    Decimal         @default(0) @db.Decimal(12, 2)
+  total       Decimal         @default(0) @db.Decimal(12, 2)
+  pdfUrl      String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   items QuotationItem[]
 
@@ -223,6 +411,8 @@ model WhatsAppMessage {
   direction  WhatsAppDirection
   body       String
   mediaUrl   String?
+  catalogId  String?
+  catalog    Catalog?          @relation(fields: [catalogId], references: [id], onDelete: SetNull)
   sentById   String?
   sentBy     User?             @relation(fields: [sentById], references: [id], onDelete: SetNull)
   createdAt  DateTime          @default(now())
@@ -255,4 +445,29 @@ model WhatsAppTemplate {
   updatedAt DateTime @updatedAt
 
   @@map("whatsapp_templates")
+}
+
+model ProductivityScoreConfig {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  points      Int
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt
+
+  @@map("productivity_score_config")
+}
+
+model UserPermission {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("PermissionOwner", fields: [userId], references: [id], onDelete: Cascade)
+  key         String
+  granted     Boolean
+  updatedById String?
+  updatedBy   User?    @relation("PermissionEditor", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, key])
+  @@map("user_permissions")
 }

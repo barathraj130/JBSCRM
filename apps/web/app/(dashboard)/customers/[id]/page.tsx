@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Building2, Clock, FilePlus2, History, Loader2, MapPin, Pencil, Phone, Plus } from "lucide-react";
+import { ArrowLeft, Building2, Clock, FilePlus2, Loader2, MapPin, Pencil, Phone, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,9 +16,9 @@ import { StatusSelect } from "@/components/leads/status-select";
 import { EditCustomerDialog } from "@/components/customers/edit-customer-dialog";
 import { WhatsAppPanel } from "@/components/customers/whatsapp-panel";
 import { AIPanel } from "@/components/customers/ai-panel";
+import { ContactTimeline } from "@/components/customers/contact-timeline";
 import { useAuth } from "@/lib/auth-context";
 import * as api from "@/lib/api-client";
-import { formatActivity } from "@/lib/activity-format";
 import type { CustomerDetailDTO, LeadStatus, QuotationDTO, QuotationStatus } from "@indiamart-crm/shared";
 
 function initials(name: string) {
@@ -45,6 +45,9 @@ export default function CustomerProfilePage() {
 
   const [noteBody, setNoteBody] = React.useState("");
   const [noteSubmitting, setNoteSubmitting] = React.useState(false);
+  const [editingNoteId, setEditingNoteId] = React.useState<string | null>(null);
+  const [editingNoteBody, setEditingNoteBody] = React.useState("");
+  const [noteEditSubmitting, setNoteEditSubmitting] = React.useState(false);
 
   const [followUpLeadId, setFollowUpLeadId] = React.useState("");
   const [followUpDue, setFollowUpDue] = React.useState("");
@@ -107,6 +110,26 @@ export default function CustomerProfilePage() {
       setError("Could not add note.");
     } finally {
       setNoteSubmitting(false);
+    }
+  }
+
+  function startEditNote(id: string, body: string) {
+    setEditingNoteId(id);
+    setEditingNoteBody(body);
+  }
+
+  async function handleSaveNoteEdit(noteId: string) {
+    if (!token || !customer || !editingNoteBody.trim()) return;
+    setNoteEditSubmitting(true);
+    try {
+      const newNote = await api.editNote(token, customer.id, noteId, editingNoteBody.trim());
+      setCustomer({ ...customer, notes: [newNote, ...customer.notes.filter((n) => n.id !== noteId)] });
+      setEditingNoteId(null);
+      setEditingNoteBody("");
+    } catch {
+      setError("Could not save the edited note.");
+    } finally {
+      setNoteEditSubmitting(false);
     }
   }
 
@@ -251,27 +274,7 @@ export default function CustomerProfilePage() {
         </TabsContent>
 
         <TabsContent value="timeline">
-          <Card>
-            <CardContent className="p-4">
-              {customer.activityLogs.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No activity recorded yet.</p>
-              ) : (
-                <ul className="space-y-3">
-                  {customer.activityLogs.map((log) => (
-                    <li key={log.id} className="flex gap-3 text-sm">
-                      <History className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                      <div>
-                        <p>
-                          <span className="font-medium">{log.user?.name ?? "System"}</span> {formatActivity(log)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{new Date(log.createdAt).toLocaleString()}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
+          <ContactTimeline customerId={customer.id} />
         </TabsContent>
 
         <TabsContent value="followups" className="space-y-3">
@@ -358,11 +361,37 @@ export default function CustomerProfilePage() {
           ) : (
             customer.notes.map((note) => (
               <Card key={note.id}>
-                <CardContent className="p-4">
-                  <p className="text-sm">{note.body}</p>
-                  <p className="mt-1.5 text-xs text-muted-foreground">
-                    {note.author?.name ?? "Removed employee"} · {new Date(note.createdAt).toLocaleString()}
-                  </p>
+                <CardContent className="space-y-2 p-4">
+                  {editingNoteId === note.id ? (
+                    <div className="space-y-2">
+                      <Textarea value={editingNoteBody} onChange={(e) => setEditingNoteBody(e.target.value)} />
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => handleSaveNoteEdit(note.id)} disabled={noteEditSubmitting || !editingNoteBody.trim()}>
+                          {noteEditSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                          Save
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingNoteId(null)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm">{note.body}</p>
+                        <button
+                          onClick={() => startEditNote(note.id, note.body)}
+                          className="shrink-0 text-xs text-muted-foreground hover:text-foreground hover:underline"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {note.author?.name ?? "Removed employee"} · {new Date(note.createdAt).toLocaleString()}
+                        {note.isEdited && " · edited"}
+                      </p>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             ))

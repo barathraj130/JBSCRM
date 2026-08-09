@@ -5,7 +5,7 @@ import { HttpError } from "@/middleware/errorHandler";
 
 const listQuerySchema = z.object({
   q: z.string().optional(),
-  category: z.string().optional(),
+  categoryId: z.string().optional(),
 });
 
 export async function listHandler(req: Request, res: Response) {
@@ -25,8 +25,7 @@ const productSchema = z.object({
   description: z.string().optional(),
   price: z.number().nonnegative(),
   stock: z.number().int().nonnegative(),
-  category: z.string().min(1),
-  subcategory: z.string().optional(),
+  categoryId: z.string().min(1),
   images: z.array(z.string()).optional(),
   videos: z.array(z.string()).optional(),
   brochureUrl: z.string().optional(),

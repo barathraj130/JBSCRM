@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Bell, CheckCheck, Clock, MessageCircle, Trophy, UserPlus, XCircle } from "lucide-react";
+import { AlertTriangle, Bell, CheckCheck, Clock, MessageCircle, Trophy, UserPlus, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -24,6 +24,7 @@ const TYPE_ICON: Record<NotificationType, React.ElementType> = {
   CUSTOMER_REPLY: MessageCircle,
   DEAL_WON: Trophy,
   DEAL_LOST: XCircle,
+  UNCONTACTED_LEAD_ALERT: AlertTriangle,
 };
 
 export function NotificationBell() {

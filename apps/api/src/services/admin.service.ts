@@ -2,8 +2,15 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { env } from "@/lib/env";
 import { HttpError } from "@/middleware/errorHandler";
-import { toAdminUserDTO, toSystemLogDTO, toWhatsAppTemplateDTO } from "@/utils/mappers";
-import type { AutomationStatusDTO, CreateEmployeeInput, CreateWhatsAppTemplateInput, UpdateEmployeeInput } from "@indiamart-crm/shared";
+import { logActivity } from "@/services/activityLog.service";
+import { toAdminUserDTO, toCustomerDuplicateAttemptDTO, toProductivityScoreConfigDTO, toSystemLogDTO, toWhatsAppTemplateDTO } from "@/utils/mappers";
+import type {
+  AutomationStatusDTO,
+  CreateEmployeeInput,
+  CreateWhatsAppTemplateInput,
+  UpdateEmployeeInput,
+  UpdateProductivityScoreConfigInput,
+} from "@indiamart-crm/shared";
 
 const userInclude = { manager: true } as const;
 
@@ -76,6 +83,34 @@ export async function listSystemLogs() {
     take: 200,
   });
   return logs.map(toSystemLogDTO);
+}
+
+export async function listScoreConfig() {
+  const rows = await prisma.productivityScoreConfig.findMany({ orderBy: { key: "asc" } });
+  return rows.map(toProductivityScoreConfigDTO);
+}
+
+export async function updateScoreConfig(actorId: string, input: UpdateProductivityScoreConfigInput) {
+  await prisma.$transaction(
+    input.map((entry) =>
+      prisma.productivityScoreConfig.upsert({
+        where: { key: entry.key },
+        create: { key: entry.key, points: entry.points, updatedById: actorId },
+        update: { points: entry.points, updatedById: actorId },
+      })
+    )
+  );
+  await logActivity("productivity_score_config", "all", actorId, "score_config_changed", { input });
+  return listScoreConfig();
+}
+
+export async function listDuplicateAttempts() {
+  const rows = await prisma.customerDuplicateAttempt.findMany({
+    include: { attemptedBy: true },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+  return rows.map(toCustomerDuplicateAttemptDTO);
 }
 
 export function getAutomationStatus(): AutomationStatusDTO {

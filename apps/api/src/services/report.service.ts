@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getVisibleUserIds, type RequestingUser } from "@/utils/leadScope";
+import { toEvidenceDTO } from "@/utils/mappers";
 import type { ReportSummaryDTO } from "@indiamart-crm/shared";
 
 export interface ReportFilter {
@@ -71,6 +72,19 @@ export async function getReportSummary(actor: RequestingUser, filter: ReportFilt
     bySource,
     byStatus,
   };
+}
+
+export async function getEvidenceReportRows(actor: RequestingUser, filter: ReportFilter) {
+  const visibleUserIds = await getVisibleUserIds(actor);
+  const rows = await prisma.evidence.findMany({
+    where: {
+      occurredAt: { gte: filter.from, lte: filter.to },
+      ...(visibleUserIds ? { employeeId: { in: visibleUserIds } } : {}),
+    },
+    include: { employee: true },
+    orderBy: { occurredAt: "desc" },
+  });
+  return rows.map(toEvidenceDTO);
 }
 
 function countBy<T>(items: T[], key: (item: T) => string): { label: string; count: number }[] {

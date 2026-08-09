@@ -1,7 +1,7 @@
 import PDFDocument from "pdfkit";
 import ExcelJS from "exceljs";
 import { env } from "@/lib/env";
-import type { ReportSummaryDTO } from "@indiamart-crm/shared";
+import type { AuditLogDTO, EvidenceDTO, ReportSummaryDTO } from "@indiamart-crm/shared";
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-IN");
@@ -151,5 +151,27 @@ export function generateReportCsv(report: ReportSummaryDTO): string {
   lines.push("By Status");
   lines.push("Status,Count");
   for (const row of report.byStatus) lines.push([row.label, row.count].map(csvEscape).join(","));
+  return lines.join("\n");
+}
+
+export function generateEvidenceReportCsv(rows: EvidenceDTO[]): string {
+  const lines = ["Occurred At,Type,Status,Employee,Customer ID,Lead ID,Reference Type,Reference ID"];
+  for (const e of rows) {
+    lines.push(
+      [e.occurredAt, e.type, e.status, e.employee?.name ?? "—", e.customerId, e.leadId ?? "", e.refType, e.refId ?? ""]
+        .map(csvEscape)
+        .join(",")
+    );
+  }
+  return lines.join("\n");
+}
+
+export function generateAuditLogCsv(rows: AuditLogDTO[]): string {
+  const lines = ["Timestamp,Actor,Action,Object Type,Object ID,Source,IP Address"];
+  for (const a of rows) {
+    lines.push(
+      [a.createdAt, a.actorName, a.action, a.objectType, a.objectId ?? "", a.source, a.ipAddress ?? ""].map(csvEscape).join(",")
+    );
+  }
   return lines.join("\n");
 }

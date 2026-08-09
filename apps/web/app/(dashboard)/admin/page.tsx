@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CheckCircle2, History, Loader2, MessageSquareText, Pencil, Plus, Trash2, UserPlus, XCircle } from "lucide-react";
+import { CheckCircle2, History, KeyRound, Loader2, MessageSquareText, Pencil, Plus, Trash2, UserPlus, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmployeeDialog } from "@/components/admin/employee-dialog";
 import { TemplateDialog } from "@/components/admin/template-dialog";
+import { PermissionsDialog } from "@/components/admin/permissions-dialog";
+import { CategoryCatalogTab } from "@/components/admin/category-catalog-tab";
+import { ScoreConfigTab } from "@/components/admin/score-config-tab";
+import { AuditLogTab } from "@/components/admin/audit-log-tab";
 import { useAuth } from "@/lib/auth-context";
 import * as api from "@/lib/api-client";
 import { ROLE_LABELS } from "@/lib/role-labels";
@@ -43,6 +47,8 @@ export default function AdminPage() {
   const [employeesLoading, setEmployeesLoading] = React.useState(true);
   const [employeeDialogOpen, setEmployeeDialogOpen] = React.useState(false);
   const [editingEmployee, setEditingEmployee] = React.useState<AdminUserDTO | null>(null);
+  const [permissionsDialogOpen, setPermissionsDialogOpen] = React.useState(false);
+  const [permissionsEmployee, setPermissionsEmployee] = React.useState<AdminUserDTO | null>(null);
 
   const [templates, setTemplates] = React.useState<WhatsAppTemplateDTO[]>([]);
   const [templatesLoading, setTemplatesLoading] = React.useState(true);
@@ -100,11 +106,14 @@ export default function AdminPage() {
       </div>
 
       <Tabs defaultValue="employees">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="employees">Employees</TabsTrigger>
           <TabsTrigger value="templates">WhatsApp Templates</TabsTrigger>
+          <TabsTrigger value="catalogs">Categories &amp; Catalogs</TabsTrigger>
+          <TabsTrigger value="score">Score Config</TabsTrigger>
           <TabsTrigger value="automation">Automation Status</TabsTrigger>
           <TabsTrigger value="logs">System Logs</TabsTrigger>
+          <TabsTrigger value="audit">Audit Logs</TabsTrigger>
         </TabsList>
 
         <TabsContent value="employees" className="space-y-3">
@@ -149,6 +158,16 @@ export default function AdminPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setPermissionsEmployee(emp);
+                              setPermissionsDialogOpen(true);
+                            }}
+                            className="text-muted-foreground hover:text-foreground"
+                            title="Permissions"
+                          >
+                            <KeyRound className="h-3.5 w-3.5" />
+                          </button>
                           <button
                             onClick={() => {
                               setEditingEmployee(emp);
@@ -225,6 +244,14 @@ export default function AdminPage() {
           )}
         </TabsContent>
 
+        <TabsContent value="catalogs">
+          <CategoryCatalogTab />
+        </TabsContent>
+
+        <TabsContent value="score">
+          <ScoreConfigTab />
+        </TabsContent>
+
         <TabsContent value="automation">
           <Card>
             <CardContent className="p-4">
@@ -295,6 +322,10 @@ export default function AdminPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="audit">
+          <AuditLogTab />
+        </TabsContent>
       </Tabs>
 
       <EmployeeDialog
@@ -305,6 +336,7 @@ export default function AdminPage() {
         onSaved={fetchEmployees}
       />
       <TemplateDialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen} template={editingTemplate} onSaved={fetchTemplates} />
+      <PermissionsDialog employee={permissionsEmployee} open={permissionsDialogOpen} onOpenChange={setPermissionsDialogOpen} />
     </div>
   );
 }

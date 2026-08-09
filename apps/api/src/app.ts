@@ -19,6 +19,11 @@ import notificationRoutes from "@/routes/notification.routes";
 import reportRoutes from "@/routes/report.routes";
 import adminRoutes from "@/routes/admin.routes";
 import whatsappTemplateRoutes from "@/routes/whatsappTemplate.routes";
+import categoryRoutes from "@/routes/category.routes";
+import catalogRoutes from "@/routes/catalog.routes";
+import productivityRoutes from "@/routes/productivity.routes";
+import auditLogRoutes from "@/routes/auditLog.routes";
+import systemRoutes from "@/routes/system.routes";
 import { errorHandler } from "@/middleware/errorHandler";
 
 // Every Vercel deploy of this project gets its own unique preview URL in
@@ -64,6 +69,11 @@ export function createApp() {
   app.use("/api/reports", reportRoutes);
   app.use("/api/admin", adminRoutes);
   app.use("/api/whatsapp-templates", whatsappTemplateRoutes);
+  app.use("/api/categories", categoryRoutes);
+  app.use("/api/catalogs", catalogRoutes);
+  app.use("/api/productivity", productivityRoutes);
+  app.use("/api/audit-logs", auditLogRoutes);
+  app.use("/api/system", systemRoutes);
 
   app.use(errorHandler);
 

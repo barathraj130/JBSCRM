@@ -30,4 +30,6 @@ export const env = {
   companyGstin: process.env.COMPANY_GSTIN ?? "",
   companyAddress: process.env.COMPANY_ADDRESS ?? "",
   apiPublicUrl: process.env.API_PUBLIC_URL ?? `http://localhost:${Number(process.env.PORT ?? 4000)}`,
+  indiamartApiKey: process.env.INDIAMART_API_KEY,
+  uncontactedLeadAlertMinutes: Number(process.env.UNCONTACTED_LEAD_ALERT_MINUTES ?? 15),
 };

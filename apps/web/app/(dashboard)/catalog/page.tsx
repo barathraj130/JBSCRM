@@ -21,7 +21,7 @@ export default function CatalogPage() {
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
-  const [category, setCategory] = React.useState("ALL");
+  const [categoryId, setCategoryId] = React.useState("ALL");
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<ProductDTO | null>(null);
 
@@ -36,19 +36,25 @@ export default function CatalogPage() {
     try {
       const data = await api.listProducts(token, {
         q: debouncedSearch || undefined,
-        category: category === "ALL" ? undefined : category,
+        categoryId: categoryId === "ALL" ? undefined : categoryId,
       });
       setProducts(data);
     } finally {
       setLoading(false);
     }
-  }, [token, debouncedSearch, category]);
+  }, [token, debouncedSearch, categoryId]);
 
   React.useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
 
-  const categories = React.useMemo(() => Array.from(new Set(products.map((p) => p.category))).sort(), [products]);
+  const categories = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of products) {
+      if (p.category) map.set(p.category.id, p.category.path);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [products]);
 
   async function handleDelete(product: ProductDTO) {
     if (!token) return;
@@ -82,15 +88,15 @@ export default function CatalogPage() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search products" className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
-        <Select value={category} onValueChange={setCategory}>
+        <Select value={categoryId} onValueChange={setCategoryId}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Category" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All categories</SelectItem>
-            {categories.map((c) => (
-              <SelectItem key={c} value={c}>
-                {c}
+            {categories.map(([id, path]) => (
+              <SelectItem key={id} value={id}>
+                {path}
               </SelectItem>
             ))}
           </SelectContent>
@@ -145,16 +151,13 @@ export default function CatalogPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-1">
-                  <Badge variant="secondary" className="text-[10px]">
-                    {product.category}
-                  </Badge>
-                  {product.subcategory && (
-                    <Badge variant="outline" className="text-[10px]">
-                      {product.subcategory}
+                {product.category && (
+                  <div className="flex flex-wrap gap-1">
+                    <Badge variant="secondary" className="text-[10px]">
+                      {product.category.path}
                     </Badge>
-                  )}
-                </div>
+                  </div>
+                )}
                 <div className="flex items-center justify-between pt-1 text-sm">
                   <span className="font-semibold">₹{product.price.toLocaleString("en-IN")}</span>
                   <span className={product.stock > 0 ? "text-muted-foreground" : "text-destructive"}>

@@ -3,6 +3,7 @@ import { HttpError } from "@/middleware/errorHandler";
 import { getVisibleUserIds, type RequestingUser } from "@/utils/leadScope";
 import { toActivityLogDTO, toCustomerRef, toFollowUpDTO, toLeadDTO, toNoteDTO, toWhatsAppMessageDTO } from "@/utils/mappers";
 import { logActivity } from "@/services/activityLog.service";
+import { recordEvidence } from "@/services/evidence.service";
 import type { CustomerDetailDTO, UpdateCustomerInput } from "@indiamart-crm/shared";
 
 export async function assertCustomerAccess(actor: RequestingUser, customerId: string) {
@@ -27,7 +28,7 @@ export async function getCustomerDetail(actor: RequestingUser, customerId: strin
 
   const [leads, notes, followUps, activityLogs, whatsAppMessages] = await Promise.all([
     prisma.lead.findMany({ where: { customerId }, include: { customer: true, assignedTo: true }, orderBy: { createdAt: "desc" } }),
-    prisma.note.findMany({ where: { customerId }, include: { author: true }, orderBy: { createdAt: "desc" } }),
+    prisma.note.findMany({ where: { customerId, supersededBy: null }, include: { author: true }, orderBy: { createdAt: "desc" } }),
     prisma.followUp.findMany({
       where: { lead: { customerId } },
       include: { user: true },
@@ -78,5 +79,32 @@ export async function addNote(actor: RequestingUser, customerId: string, body: s
     include: { author: true },
   });
   await logActivity("customer", customerId, actor.id, "note_added");
+  await recordEvidence({
+    customerId,
+    employeeId: actor.id,
+    type: "NOTE_ADDED",
+    status: "VERIFIED",
+    refType: "Note",
+    refId: note.id,
+  });
   return toNoteDTO(note);
+}
+
+/**
+ * Notes are never silently edited in place. Editing creates a new Note pointing at the
+ * previous version and marks the old one superseded, so the full history stays intact.
+ */
+export async function editNote(actor: RequestingUser, customerId: string, noteId: string, body: string) {
+  await assertCustomerAccess(actor, customerId);
+  const existing = await prisma.note.findUnique({ where: { id: noteId } });
+  if (!existing || existing.customerId !== customerId) throw new HttpError(404, "Note not found");
+
+  const newNote = await prisma.note.create({
+    data: { customerId, authorId: actor.id, body, previousVersionId: existing.id },
+    include: { author: true },
+  });
+
+  await logActivity("customer", customerId, actor.id, "note_edited", { noteId: existing.id, newNoteId: newNote.id }, { oldValue: existing.body, newValue: body });
+
+  return toNoteDTO(newNote);
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Download, FileSpreadsheet, FileText, Loader2, Trophy } from "lucide-react";
+import { Download, FileSpreadsheet, FileText, Loader2, ShieldCheck, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -76,6 +76,19 @@ export default function ReportsPage() {
     }
   }
 
+  async function handleEvidenceExport(kind: "evidence" | "audit") {
+    if (!token) return;
+    setExporting(kind);
+    try {
+      const blob = kind === "evidence" ? await api.exportEvidenceReportCsv(token, from, to) : await api.exportAuditLogCsv(token, from, to);
+      downloadBlob(blob, `${kind}-${from}-to-${to}.csv`);
+    } catch {
+      setError("Export failed.");
+    } finally {
+      setExporting(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -107,6 +120,14 @@ export default function ReportsPage() {
           <Button variant="outline" size="sm" onClick={() => handleExport("pdf")} disabled={exporting !== null}>
             {exporting === "pdf" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
             PDF
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleEvidenceExport("evidence")} disabled={exporting !== null}>
+            {exporting === "evidence" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+            Evidence
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleEvidenceExport("audit")} disabled={exporting !== null}>
+            {exporting === "audit" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+            Audit Log
           </Button>
         </div>
       </div>

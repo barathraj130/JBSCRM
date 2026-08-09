@@ -3,6 +3,7 @@ import { HttpError } from "@/middleware/errorHandler";
 import { getVisibleUserIds, type RequestingUser } from "@/utils/leadScope";
 import { toQuotationDTO } from "@/utils/mappers";
 import { logActivity } from "@/services/activityLog.service";
+import { recordEvidence } from "@/services/evidence.service";
 import { generateQuotationPdf } from "@/lib/pdf";
 import { storageProvider } from "@/lib/storage";
 import { whatsappProvider } from "@/integrations/whatsapp";
@@ -83,6 +84,16 @@ export async function createQuotation(actor: RequestingUser, input: CreateQuotat
   });
 
   await logActivity("customer", input.customerId, actor.id, "quotation_created", { quotationId: quotation.id, total });
+  await recordEvidence({
+    customerId: input.customerId,
+    leadId: input.leadId ?? null,
+    employeeId: actor.id,
+    type: "QUOTATION_CREATED",
+    status: "VERIFIED",
+    refType: "Quotation",
+    refId: quotation.id,
+    metadata: { total },
+  });
 
   return toQuotationDTO(quotation);
 }
@@ -119,6 +130,15 @@ export async function sendQuotationViaWhatsApp(actor: RequestingUser, id: string
   });
 
   await logActivity("customer", quotation.customerId, actor.id, "quotation_sent_whatsapp", { quotationId: id });
+  await recordEvidence({
+    customerId: quotation.customerId,
+    leadId: quotation.leadId,
+    employeeId: actor.id,
+    type: "QUOTATION_SENT",
+    status: "VERIFIED",
+    refType: "Quotation",
+    refId: id,
+  });
 
   return { pdfUrl: url };
 }

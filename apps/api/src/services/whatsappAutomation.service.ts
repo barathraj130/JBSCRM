@@ -1,14 +1,16 @@
 import { prisma } from "@/lib/prisma";
 import { env } from "@/lib/env";
-import { HttpError } from "@/middleware/errorHandler";
 import { assertCustomerAccess } from "@/services/customer.service";
-import { getVisibleUserIds, type RequestingUser } from "@/utils/leadScope";
+import { type RequestingUser } from "@/utils/leadScope";
 import { toWhatsAppMessageDTO } from "@/utils/mappers";
 import { logActivity } from "@/services/activityLog.service";
 import { createNotification } from "@/services/notification.service";
+import { recordEvidence } from "@/services/evidence.service";
+import { findCatalogForCategoryNames } from "@/services/catalog.service";
 import { whatsappProvider } from "@/integrations/whatsapp";
 import { getAIProvider } from "@/integrations/ai";
 import { notifyN8n } from "@/integrations/n8n/client";
+import { HttpError } from "@/middleware/errorHandler";
 import type { Customer, Prisma } from "@prisma/client";
 
 type WhatsAppMessageWithSentBy = Prisma.WhatsAppMessageGetPayload<{ include: { sentBy: true } }>;
@@ -42,6 +44,14 @@ export async function sendManualMessage(actor: RequestingUser, customerId: strin
   });
 
   await logActivity("customer", customerId, actor.id, "whatsapp_message_sent");
+  await recordEvidence({
+    customerId,
+    employeeId: actor.id,
+    type: "WHATSAPP_MESSAGE_SENT",
+    status: "VERIFIED",
+    refType: "WhatsAppMessage",
+    refId: message.id,
+  });
 
   return toWhatsAppMessageDTO(message);
 }
@@ -54,10 +64,20 @@ export async function processInboundMessage(actor: RequestingUser | null, custom
     include: { sentBy: true },
   });
   await logActivity("customer", customerId, null, "whatsapp_message_received", { body });
+  await recordEvidence({
+    customerId,
+    employeeId: null,
+    type: "WHATSAPP_MESSAGE_RECEIVED",
+    status: "VERIFIED",
+    refType: "WhatsAppMessage",
+    refId: inbound.id,
+  });
 
   const assignedLead = await prisma.lead.findFirst({ where: { customerId, assignedToId: { not: null } }, orderBy: { createdAt: "desc" } });
-  if (assignedLead?.assignedToId) {
-    await createNotification(assignedLead.assignedToId, "CUSTOMER_REPLY", `Customer replied: ${customer.name}`, {
+  const respondingEmployeeId = assignedLead?.assignedToId ?? null;
+
+  if (respondingEmployeeId) {
+    await createNotification(respondingEmployeeId, "CUSTOMER_REPLY", `Customer replied: ${customer.name}`, {
       body,
       entityType: "customer",
       entityId: customerId,
@@ -66,42 +86,60 @@ export async function processInboundMessage(actor: RequestingUser | null, custom
 
   const outboundRecords: WhatsAppMessageWithSentBy[] = [];
 
-  const categories = (await prisma.product.findMany({ distinct: ["category"], select: { category: true } })).map((c) => c.category);
-  const matchedCategories = await detectCategories(body, categories);
+  const categoryNames = (await prisma.category.findMany({ select: { name: true } })).map((c) => c.name);
+  const matchedCategories = await detectCategories(body, categoryNames);
+  const catalog = await findCatalogForCategoryNames(matchedCategories);
+  const products = catalog?.products.map((cp) => cp.product) ?? [];
 
-  const products = matchedCategories.length
-    ? await prisma.product.findMany({ where: { category: { in: matchedCategories } }, take: 3 })
-    : [];
-
-  async function sendAndLog(kind: "text" | "media", content: { body: string; mediaUrl?: string }) {
+  async function sendAndLog(kind: "text" | "media", content: { body: string; mediaUrl?: string }, catalogId?: string) {
     if (kind === "media" && content.mediaUrl) {
       await whatsappProvider.sendMedia({ to: customer.phone, mediaUrl: absoluteUrl(content.mediaUrl), caption: content.body });
     } else {
       await whatsappProvider.sendMessage({ to: customer.phone, body: content.body });
     }
     const record = await prisma.whatsAppMessage.create({
-      data: { customerId, direction: "OUTBOUND", body: content.body, mediaUrl: content.mediaUrl, sentById: null },
+      data: { customerId, direction: "OUTBOUND", body: content.body, mediaUrl: content.mediaUrl, sentById: null, catalogId },
       include: { sentBy: true },
     });
     outboundRecords.push(record);
+    await recordEvidence({
+      customerId,
+      leadId: assignedLead?.id ?? null,
+      employeeId: respondingEmployeeId,
+      type: "WHATSAPP_MESSAGE_SENT",
+      status: "VERIFIED",
+      refType: "WhatsAppMessage",
+      refId: record.id,
+    });
   }
 
-  if (products.length > 0) {
+  if (catalog && products.length > 0) {
     for (const product of products.slice(0, 2)) {
       if (product.images[0]) {
-        await sendAndLog("media", { body: product.name, mediaUrl: product.images[0] });
+        await sendAndLog("media", { body: product.name, mediaUrl: product.images[0] }, catalog.id);
       }
     }
     const brochure = products.find((p) => p.brochureUrl);
     if (brochure?.brochureUrl) {
-      await sendAndLog("media", { body: `${brochure.name} brochure`, mediaUrl: brochure.brochureUrl });
+      await sendAndLog("media", { body: `${brochure.name} brochure`, mediaUrl: brochure.brochureUrl }, catalog.id);
     }
     const priceList = products.map((p) => `${p.name} — Rs. ${Number(p.price).toLocaleString("en-IN")}`).join("\n");
-    await sendAndLog("text", { body: `Here's what we have in ${matchedCategories.join(", ")}:\n${priceList}` });
+    await sendAndLog("text", { body: `Here's what we have in ${catalog.name}:\n${priceList}` }, catalog.id);
 
     await logActivity("customer", customerId, null, "whatsapp_auto_catalog_sent", {
       matchedCategories,
+      catalogId: catalog.id,
       productIds: products.map((p) => p.id),
+    });
+    await recordEvidence({
+      customerId,
+      leadId: assignedLead?.id ?? null,
+      employeeId: respondingEmployeeId,
+      type: "CATALOG_SENT",
+      status: "VERIFIED",
+      refType: "Catalog",
+      refId: catalog.id,
+      metadata: { matchedCategories, productIds: products.map((p) => p.id) },
     });
   } else {
     await sendAndLog("text", {
@@ -114,6 +152,7 @@ export async function processInboundMessage(actor: RequestingUser | null, custom
     customerId,
     inboundBody: body,
     matchedCategories,
+    catalogId: catalog?.id ?? null,
     productsSent: products.map((p) => p.id),
   });
 

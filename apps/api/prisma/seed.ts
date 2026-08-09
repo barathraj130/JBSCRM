@@ -57,6 +57,22 @@ async function main() {
     }
   }
 
+  const defaultScores: Record<string, number> = {
+    WHATSAPP_MESSAGE_SENT: 2,
+    CATALOG_SENT: 5,
+    CALL_LOGGED: 3,
+    FOLLOW_UP_COMPLETED: 5,
+    QUOTATION_SENT: 8,
+    DEAL_WON: 25,
+  };
+  for (const [key, points] of Object.entries(defaultScores)) {
+    await prisma.productivityScoreConfig.upsert({
+      where: { key },
+      update: {},
+      create: { key, points },
+    });
+  }
+
   console.log("Seed complete:");
   console.log(`  Admin login:    admin@indiamartcrm.dev / password123`);
   console.log(`  Manager login:  manager@indiamartcrm.dev / password123`);

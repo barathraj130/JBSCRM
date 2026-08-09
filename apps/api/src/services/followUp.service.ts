@@ -3,6 +3,7 @@ import { HttpError } from "@/middleware/errorHandler";
 import { getVisibleUserIds, type RequestingUser } from "@/utils/leadScope";
 import { toFollowUpDTO } from "@/utils/mappers";
 import { logActivity } from "@/services/activityLog.service";
+import { recordEvidence } from "@/services/evidence.service";
 
 export async function createFollowUp(actor: RequestingUser, leadId: string, dueAt: Date, notes?: string) {
   const visibleUserIds = await getVisibleUserIds(actor);
@@ -18,6 +19,16 @@ export async function createFollowUp(actor: RequestingUser, leadId: string, dueA
   });
 
   await logActivity("lead", leadId, actor.id, "follow_up_scheduled", { dueAt: dueAt.toISOString() });
+  await recordEvidence({
+    customerId: lead.customerId,
+    leadId,
+    employeeId: actor.id,
+    type: "FOLLOW_UP_SCHEDULED",
+    status: "VERIFIED",
+    refType: "FollowUp",
+    refId: followUp.id,
+    occurredAt: followUp.createdAt,
+  });
 
   return toFollowUpDTO(followUp);
 }
@@ -37,6 +48,16 @@ export async function completeFollowUp(actor: RequestingUser, followUpId: string
   });
 
   await logActivity("lead", followUp.leadId, actor.id, "follow_up_completed", { outcome });
+  await recordEvidence({
+    customerId: followUp.lead.customerId,
+    leadId: followUp.leadId,
+    employeeId: actor.id,
+    type: "FOLLOW_UP_COMPLETED",
+    status: "VERIFIED",
+    refType: "FollowUp",
+    refId: followUp.id,
+    metadata: { outcome: outcome ?? null },
+  });
 
   return toFollowUpDTO(updated);
 }

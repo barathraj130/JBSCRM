@@ -6,12 +6,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import * as api from "@/lib/api-client";
-import type { ProductDTO } from "@indiamart-crm/shared";
+import type { CategoryDTO, ProductDTO } from "@indiamart-crm/shared";
 
-const emptyForm = { name: "", description: "", price: "", stock: "", category: "", subcategory: "" };
+const emptyForm = { name: "", description: "", price: "", stock: "", categoryId: "" };
+
+function flattenCategories(categories: CategoryDTO[], depth = 0): { id: string; label: string }[] {
+  return categories.flatMap((c) => [
+    { id: c.id, label: `${"— ".repeat(depth)}${c.name}` },
+    ...flattenCategories(c.children, depth + 1),
+  ]);
+}
 
 export function ProductDialog({
   open,
@@ -26,12 +34,19 @@ export function ProductDialog({
 }) {
   const { token } = useAuth();
   const [form, setForm] = React.useState(emptyForm);
+  const [categories, setCategories] = React.useState<{ id: string; label: string }[]>([]);
   const [images, setImages] = React.useState<string[]>([]);
   const [video, setVideo] = React.useState<string | undefined>(undefined);
   const [brochureUrl, setBrochureUrl] = React.useState<string | undefined>(undefined);
   const [uploading, setUploading] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (open && token) {
+      api.listCategories(token).then((tree) => setCategories(flattenCategories(tree)));
+    }
+  }, [open, token]);
 
   React.useEffect(() => {
     if (open) {
@@ -42,8 +57,7 @@ export function ProductDialog({
               description: product.description ?? "",
               price: String(product.price),
               stock: String(product.stock),
-              category: product.category,
-              subcategory: product.subcategory ?? "",
+              categoryId: product.category?.id ?? "",
             }
           : emptyForm
       );
@@ -92,7 +106,7 @@ export function ProductDialog({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!token) return;
-    if (!form.name.trim() || !form.category.trim() || !form.price || !form.stock) {
+    if (!form.name.trim() || !form.categoryId || !form.price || !form.stock) {
       setError("Name, category, price, and stock are required.");
       return;
     }
@@ -104,8 +118,7 @@ export function ProductDialog({
         description: form.description || undefined,
         price: Number(form.price),
         stock: Number(form.stock),
-        category: form.category.trim(),
-        subcategory: form.subcategory || undefined,
+        categoryId: form.categoryId,
         images,
         videos: video ? [video] : [],
         brochureUrl,
@@ -148,13 +161,24 @@ export function ProductDialog({
               <Label htmlFor="p-stock">Stock *</Label>
               <Input id="p-stock" type="number" min="0" value={form.stock} onChange={(e) => update("stock", e.target.value)} />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="p-category">Category *</Label>
-              <Input id="p-category" value={form.category} onChange={(e) => update("category", e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="p-subcategory">Subcategory</Label>
-              <Input id="p-subcategory" value={form.subcategory} onChange={(e) => update("subcategory", e.target.value)} />
+            <div className="col-span-2 space-y-1.5">
+              <Label>Category *</Label>
+              <Select value={form.categoryId} onValueChange={(v) => update("categoryId", v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.length === 0 ? (
+                    <div className="p-2 text-xs text-muted-foreground">No categories yet — create one in Admin Panel.</div>
+                  ) : (
+                    categories.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.label}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

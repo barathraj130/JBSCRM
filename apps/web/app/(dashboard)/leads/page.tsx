@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Loader2, Plus, Search, X } from "lucide-react";
+import { AlertTriangle, Loader2, Plus, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -12,9 +12,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { StatusSelect } from "@/components/leads/status-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AddCustomerDialog } from "@/components/leads/add-customer-dialog";
+import { AssignmentHistoryDialog } from "@/components/leads/assignment-history-dialog";
 import { useAuth } from "@/lib/auth-context";
 import * as api from "@/lib/api-client";
-import { LEAD_STATUS_LABELS, LeadStatus, type LeadDTO, type UserRefDTO } from "@indiamart-crm/shared";
+import { LEAD_STATUS_LABELS, LeadStatus, type LeadDTO, type UncontactedLeadAlertDTO, type UserRefDTO } from "@indiamart-crm/shared";
 
 const SORT_OPTIONS = [
   { value: "createdAt:desc", label: "Newest first" },
@@ -42,6 +43,7 @@ export default function LeadsPage() {
   const [bulkStatus, setBulkStatus] = React.useState<string>("");
   const [bulkAssignee, setBulkAssignee] = React.useState<string>("");
   const [bulkSubmitting, setBulkSubmitting] = React.useState(false);
+  const [uncontactedAlerts, setUncontactedAlerts] = React.useState<UncontactedLeadAlertDTO[]>([]);
 
   React.useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -78,6 +80,13 @@ export default function LeadsPage() {
     if (!token || !canManage) return;
     api.listUsers(token).then(setUsers).catch(() => {});
   }, [token, canManage]);
+
+  React.useEffect(() => {
+    if (!token) return;
+    api.getUncontactedLeadAlerts(token).then(setUncontactedAlerts).catch(() => {});
+  }, [token, leads]);
+
+  const uncontactedLeadIds = React.useMemo(() => new Set(uncontactedAlerts.map((a) => a.lead.id)), [uncontactedAlerts]);
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -135,6 +144,18 @@ export default function LeadsPage() {
           Add customer
         </Button>
       </div>
+
+      {uncontactedAlerts.length > 0 && (
+        <Card className="flex items-center gap-2 border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          {uncontactedAlerts.length} lead{uncontactedAlerts.length === 1 ? "" : "s"} not contacted for over the alert threshold —{" "}
+          {uncontactedAlerts
+            .slice(0, 3)
+            .map((a) => a.lead.customer.name)
+            .join(", ")}
+          {uncontactedAlerts.length > 3 ? ` and ${uncontactedAlerts.length - 3} more` : ""}.
+        </Card>
+      )}
 
       <Card className="space-y-3 p-4">
         <div className="flex flex-wrap gap-3">
@@ -252,11 +273,12 @@ export default function LeadsPage() {
                 <TableHead>Source</TableHead>
                 <TableHead>Assigned to</TableHead>
                 <TableHead>Created</TableHead>
+                <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {leads.map((lead) => (
-                <TableRow key={lead.id}>
+                <TableRow key={lead.id} className={uncontactedLeadIds.has(lead.id) ? "bg-amber-500/5" : undefined}>
                   <TableCell>
                     <Checkbox checked={selected.has(lead.id)} onCheckedChange={() => toggleSelected(lead.id)} />
                   </TableCell>
@@ -269,11 +291,17 @@ export default function LeadsPage() {
                   <TableCell className="text-sm text-muted-foreground">{lead.customer.company ?? "—"}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{lead.productInterested ?? "—"}</TableCell>
                   <TableCell>
-                    <StatusSelect value={lead.status} onChange={(status) => handleStatusChange(lead.id, status)} />
+                    <div className="flex items-center gap-1.5">
+                      <StatusSelect value={lead.status} onChange={(status) => handleStatusChange(lead.id, status)} />
+                      {uncontactedLeadIds.has(lead.id) && <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />}
+                    </div>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{lead.source}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{lead.assignedTo?.name ?? "Unassigned"}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{new Date(lead.createdAt).toLocaleDateString()}</TableCell>
+                  <TableCell>
+                    <AssignmentHistoryDialog leadId={lead.id} customerName={lead.customer.name} />
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

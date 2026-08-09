@@ -10,8 +10,13 @@ const loginSchema = z.object({
 
 export async function loginHandler(req: AuthedRequest, res: Response) {
   const { email, password } = loginSchema.parse(req.body);
-  const result = await authService.login(email, password);
+  const result = await authService.login(email, password, req.ip, req.headers["user-agent"]);
   res.json(result);
+}
+
+export async function logoutHandler(req: AuthedRequest, res: Response) {
+  await authService.logout(req.user!.id, req.ip, req.headers["user-agent"]);
+  res.status(204).send();
 }
 
 const refreshSchema = z.object({

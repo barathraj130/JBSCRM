@@ -71,3 +71,14 @@ export async function bulkUpdateHandler(req: AuthedRequest, res: Response) {
   const result = await leadService.bulkUpdateLeads(req.user!, input);
   res.json(result);
 }
+
+export async function assignmentHistoryHandler(req: AuthedRequest, res: Response) {
+  if (!req.params.id) throw new HttpError(400, "Missing lead id");
+  const history = await leadService.getAssignmentHistory(req.user!, req.params.id);
+  res.json(history);
+}
+
+export async function uncontactedAlertsHandler(req: AuthedRequest, res: Response) {
+  const alerts = await leadService.getUncontactedLeadAlerts(req.user!);
+  res.json(alerts);
+}
