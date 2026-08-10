@@ -24,6 +24,7 @@ import type {
   CreateQuotationInput,
   CreateWhatsAppTemplateInput,
   CustomerDetailDTO,
+  CustomerListItemDTO,
   CustomerRefDTO,
   CustomerTimelineEntryDTO,
   DashboardSummaryDTO,
@@ -172,6 +173,21 @@ export function updateLead(token: string, id: string, input: UpdateLeadInput): P
 
 export function bulkUpdateLeads(token: string, input: BulkUpdateLeadsInput): Promise<{ updated: number }> {
   return request<{ updated: number }>("/api/leads/bulk", { method: "PATCH", body: JSON.stringify(input) }, token);
+}
+
+export interface ListCustomersParams {
+  q?: string;
+  sortBy?: "name" | "createdAt" | "updatedAt";
+  sortDir?: "asc" | "desc";
+}
+
+export function listCustomers(token: string, params: ListCustomersParams = {}): Promise<CustomerListItemDTO[]> {
+  const query = new URLSearchParams();
+  if (params.q) query.set("q", params.q);
+  if (params.sortBy) query.set("sortBy", params.sortBy);
+  if (params.sortDir) query.set("sortDir", params.sortDir);
+  const qs = query.toString();
+  return request<CustomerListItemDTO[]>(`/api/customers${qs ? `?${qs}` : ""}`, {}, token);
 }
 
 export function getCustomer(token: string, id: string): Promise<CustomerDetailDTO> {

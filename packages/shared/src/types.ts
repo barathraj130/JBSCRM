@@ -100,6 +100,21 @@ export interface CustomerDetailDTO {
   whatsAppMessages: WhatsAppMessageDTO[];
 }
 
+export interface CustomerListItemDTO {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  company: string | null;
+  city: string | null;
+  state: string | null;
+  leadCount: number;
+  latestLeadStatus: LeadStatus | null;
+  assignedTo: UserRefDTO | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CreateLeadInput {
   name: string;
   phone: string;

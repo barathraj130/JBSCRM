@@ -1,10 +1,48 @@
 import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/middleware/errorHandler";
 import { getVisibleUserIds, type RequestingUser } from "@/utils/leadScope";
-import { toActivityLogDTO, toCustomerRef, toFollowUpDTO, toLeadDTO, toNoteDTO, toWhatsAppMessageDTO } from "@/utils/mappers";
+import { toActivityLogDTO, toCustomerListItemDTO, toCustomerRef, toFollowUpDTO, toLeadDTO, toNoteDTO, toWhatsAppMessageDTO } from "@/utils/mappers";
 import { logActivity } from "@/services/activityLog.service";
 import { recordEvidence } from "@/services/evidence.service";
-import type { CustomerDetailDTO, UpdateCustomerInput } from "@indiamart-crm/shared";
+import type { CustomerDetailDTO, CustomerListItemDTO, UpdateCustomerInput } from "@indiamart-crm/shared";
+import type { Prisma } from "@prisma/client";
+
+export interface ListCustomersFilter {
+  q?: string;
+  sortBy?: "name" | "createdAt" | "updatedAt";
+  sortDir?: "asc" | "desc";
+}
+
+export async function listCustomers(actor: RequestingUser, filter: ListCustomersFilter): Promise<CustomerListItemDTO[]> {
+  const visibleUserIds = await getVisibleUserIds(actor);
+
+  const where: Prisma.CustomerWhereInput = {};
+  if (visibleUserIds) {
+    where.leads = { some: { assignedToId: { in: visibleUserIds } } };
+  }
+  if (filter.q) {
+    where.OR = [
+      { name: { contains: filter.q, mode: "insensitive" } },
+      { phone: { contains: filter.q } },
+      { company: { contains: filter.q, mode: "insensitive" } },
+    ];
+  }
+
+  const orderBy: Prisma.CustomerOrderByWithRelationInput =
+    filter.sortBy === "name"
+      ? { name: filter.sortDir ?? "asc" }
+      : filter.sortBy === "updatedAt"
+        ? { updatedAt: filter.sortDir ?? "desc" }
+        : { createdAt: filter.sortDir ?? "desc" };
+
+  const customers = await prisma.customer.findMany({
+    where,
+    orderBy,
+    include: { leads: { include: { assignedTo: true }, orderBy: { createdAt: "desc" } } },
+  });
+
+  return customers.map(toCustomerListItemDTO);
+}
 
 export async function assertCustomerAccess(actor: RequestingUser, customerId: string) {
   const visibleUserIds = await getVisibleUserIds(actor);

@@ -7,6 +7,18 @@ import type { AuthedRequest } from "@/middleware/auth";
 import { HttpError } from "@/middleware/errorHandler";
 import { CallDirection } from "@indiamart-crm/shared";
 
+const listQuerySchema = z.object({
+  q: z.string().optional(),
+  sortBy: z.enum(["name", "createdAt", "updatedAt"]).optional(),
+  sortDir: z.enum(["asc", "desc"]).optional(),
+});
+
+export async function listHandler(req: AuthedRequest, res: Response) {
+  const query = listQuerySchema.parse(req.query);
+  const customers = await customerService.listCustomers(req.user!, query);
+  res.json(customers);
+}
+
 export async function getHandler(req: AuthedRequest, res: Response) {
   if (!req.params.id) throw new HttpError(400, "Missing customer id");
   const customer = await customerService.getCustomerDetail(req.user!, req.params.id);

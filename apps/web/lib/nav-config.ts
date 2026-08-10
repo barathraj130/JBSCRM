@@ -22,7 +22,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["ADMIN", "SALES_MANAGER", "EMPLOYEE"], enabled: true },
   { label: "Leads", href: "/leads", icon: Users, roles: ["ADMIN", "SALES_MANAGER", "EMPLOYEE"], enabled: true },
-  { label: "Customers", href: "/customers", icon: Contact, roles: ["ADMIN", "SALES_MANAGER", "EMPLOYEE"], enabled: false },
+  { label: "Customers", href: "/customers", icon: Contact, roles: ["ADMIN", "SALES_MANAGER", "EMPLOYEE"], enabled: true },
   { label: "Catalog", href: "/catalog", icon: BookImage, roles: ["ADMIN", "SALES_MANAGER", "EMPLOYEE"], enabled: true },
   { label: "Quotations", href: "/quotations", icon: FileText, roles: ["ADMIN", "SALES_MANAGER", "EMPLOYEE"], enabled: true },
   { label: "Productivity", href: "/productivity", icon: TrendingUp, roles: ["ADMIN", "SALES_MANAGER", "EMPLOYEE"], enabled: true },

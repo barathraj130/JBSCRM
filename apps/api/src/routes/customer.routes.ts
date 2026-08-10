@@ -4,6 +4,7 @@ import {
   editNoteHandler,
   getHandler,
   listCallsHandler,
+  listHandler,
   logCallHandler,
   lookupHandler,
   timelineHandler,
@@ -16,6 +17,7 @@ const router = Router();
 
 router.use(requireAuth);
 
+router.get("/", asyncHandler(listHandler));
 router.get("/lookup", asyncHandler(lookupHandler));
 router.get("/:id", asyncHandler(getHandler));
 router.patch("/:id", asyncHandler(updateHandler));

@@ -29,6 +29,7 @@ import type {
   CategoryDTO,
   CategoryRefDTO,
   CustomerDuplicateAttemptDTO,
+  CustomerListItemDTO,
   CustomerRefDTO,
   EvidenceDTO,
   FollowUpDTO,
@@ -60,6 +61,26 @@ export function toCustomerRef(customer: Customer): CustomerRefDTO {
     company: customer.company,
     city: customer.city,
     state: customer.state,
+  };
+}
+
+export function toCustomerListItemDTO(
+  customer: Customer & { leads: (Lead & { assignedTo: User | null })[] }
+): CustomerListItemDTO {
+  const latestLead = customer.leads[0] ?? null;
+  return {
+    id: customer.id,
+    name: customer.name,
+    phone: customer.phone,
+    email: customer.email,
+    company: customer.company,
+    city: customer.city,
+    state: customer.state,
+    leadCount: customer.leads.length,
+    latestLeadStatus: latestLead?.status ?? null,
+    assignedTo: toUserRef(latestLead?.assignedTo ?? null),
+    createdAt: customer.createdAt.toISOString(),
+    updatedAt: customer.updatedAt.toISOString(),
   };
 }
 
