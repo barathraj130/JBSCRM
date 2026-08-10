@@ -9,6 +9,7 @@ import type { Prisma } from "@prisma/client";
 
 export interface ListCustomersFilter {
   q?: string;
+  assignedToId?: string;
   sortBy?: "name" | "createdAt" | "updatedAt";
   sortDir?: "asc" | "desc";
 }
@@ -18,7 +19,17 @@ export async function listCustomers(actor: RequestingUser, filter: ListCustomers
 
   const where: Prisma.CustomerWhereInput = {};
   if (visibleUserIds) {
-    where.leads = { some: { assignedToId: { in: visibleUserIds } } };
+    where.leads = {
+      some: {
+        assignedToId: filter.assignedToId
+          ? visibleUserIds.includes(filter.assignedToId)
+            ? filter.assignedToId
+            : "__none__"
+          : { in: visibleUserIds },
+      },
+    };
+  } else if (filter.assignedToId) {
+    where.leads = { some: { assignedToId: filter.assignedToId } };
   }
   if (filter.q) {
     where.OR = [

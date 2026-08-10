@@ -9,6 +9,7 @@ import { CallDirection } from "@indiamart-crm/shared";
 
 const listQuerySchema = z.object({
   q: z.string().optional(),
+  assignedToId: z.string().optional(),
   sortBy: z.enum(["name", "createdAt", "updatedAt"]).optional(),
   sortDir: z.enum(["asc", "desc"]).optional(),
 });

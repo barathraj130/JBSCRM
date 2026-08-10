@@ -177,6 +177,7 @@ export function bulkUpdateLeads(token: string, input: BulkUpdateLeadsInput): Pro
 
 export interface ListCustomersParams {
   q?: string;
+  assignedToId?: string;
   sortBy?: "name" | "createdAt" | "updatedAt";
   sortDir?: "asc" | "desc";
 }
@@ -184,6 +185,7 @@ export interface ListCustomersParams {
 export function listCustomers(token: string, params: ListCustomersParams = {}): Promise<CustomerListItemDTO[]> {
   const query = new URLSearchParams();
   if (params.q) query.set("q", params.q);
+  if (params.assignedToId) query.set("assignedToId", params.assignedToId);
   if (params.sortBy) query.set("sortBy", params.sortBy);
   if (params.sortDir) query.set("sortDir", params.sortDir);
   const qs = query.toString();

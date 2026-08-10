@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/lib/auth-context";
 import * as api from "@/lib/api-client";
-import { LEAD_STATUS_LABELS, type CustomerListItemDTO } from "@indiamart-crm/shared";
+import { LEAD_STATUS_LABELS, type CustomerListItemDTO, type UserRefDTO } from "@indiamart-crm/shared";
 
 const SORT_OPTIONS = [
   { value: "createdAt:desc", label: "Newest first" },
@@ -21,14 +21,17 @@ const SORT_OPTIONS = [
 ];
 
 export default function CustomersPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const canManage = user?.role === "ADMIN" || user?.role === "SALES_MANAGER";
 
   const [customers, setCustomers] = React.useState<CustomerListItemDTO[]>([]);
+  const [users, setUsers] = React.useState<UserRefDTO[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [assigneeFilter, setAssigneeFilter] = React.useState<string>("ALL");
   const [sort, setSort] = React.useState("createdAt:desc");
 
   React.useEffect(() => {
@@ -42,18 +45,28 @@ export default function CustomersPage() {
     setError(null);
     const [sortBy, sortDir] = sort.split(":") as [api.ListCustomersParams["sortBy"], api.ListCustomersParams["sortDir"]];
     try {
-      const data = await api.listCustomers(token, { q: debouncedSearch || undefined, sortBy, sortDir });
+      const data = await api.listCustomers(token, {
+        q: debouncedSearch || undefined,
+        assignedToId: assigneeFilter === "ALL" ? undefined : assigneeFilter,
+        sortBy,
+        sortDir,
+      });
       setCustomers(data);
     } catch {
       setError("Could not load customers.");
     } finally {
       setLoading(false);
     }
-  }, [token, debouncedSearch, sort]);
+  }, [token, debouncedSearch, assigneeFilter, sort]);
 
   React.useEffect(() => {
     fetchCustomers();
   }, [fetchCustomers]);
+
+  React.useEffect(() => {
+    if (!token || !canManage) return;
+    api.listUsers(token).then(setUsers).catch(() => {});
+  }, [token, canManage]);
 
   return (
     <div className="space-y-4">
@@ -68,6 +81,22 @@ export default function CustomersPage() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Search name, phone, company" className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
+
+          {canManage && (
+            <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+              <SelectTrigger className="w-[170px]">
+                <SelectValue placeholder="Assigned to" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Everyone</SelectItem>
+                {users.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           <Select value={sort} onValueChange={setSort}>
             <SelectTrigger className="w-[190px]">
